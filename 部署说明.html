@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>部署说明</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:-apple-system,"PingFang SC","Microsoft YaHei",sans-serif;background:#f2f3f7;color:#1a1a2e;max-width:680px;margin:0 auto;padding:28px 18px 60px;line-height:1.8}
+h1{font-size:22px;margin-bottom:6px}
+.tip{color:#888;font-size:13px;margin-bottom:24px}
+.step{background:#fff;border-radius:14px;padding:18px 20px;margin-bottom:14px;box-shadow:0 2px 12px rgba(0,0,0,.06)}
+.step b{color:#16a34a}
+.num{display:inline-flex;width:26px;height:26px;border-radius:50%;background:#16a34a;color:#fff;
+  align-items:center;justify-content:center;font-size:14px;font-weight:700;margin-right:8px}
+.hl{background:#fffbeb;padding:2px 6px;border-radius:6px;color:#b45309;font-weight:600}
+a{color:#3b82f6}
+.back{display:inline-block;margin-top:10px;color:#3b82f6;text-decoration:none;font-weight:600}
+</style>
+</head>
+<body>
+<h1>📲 部署成手机可访问的网址</h1>
+<div class="tip">数据只存在你设备本地，部署只是把"界面"放到网上，别人看不到你的数据。</div>
+
+<div class="step">
+  <div><span class="num">1</span><b>准备这个文件夹</b></div>
+  <p style="margin-top:8px">就是 <span class="hl">deploy</span> 文件夹，里面已有：index.html、weight.html、stock.html、manifest、图标、sw.js。整个文件夹一起用。</p>
+</div>
+
+<div class="step">
+  <div><span class="num">2</span><b>最省事：Netlify Drop（拖进去就行）</b></div>
+  <p style="margin-top:8px">① 打开 <a href="https://app.netlify.com/drop" target="_blank">app.netlify.com/drop</a><br>
+  ② 建议先免费注册/登录一个账号（方便以后改）<br>
+  ③ 把整个 <span class="hl">deploy</span> 文件夹拖到页面上<br>
+  ④ 几秒后自动生成网址，如 <span class="hl">xxx.netlify.app</span></p>
+</div>
+
+<div class="step">
+  <div><span class="num">3</span><b>替代：Vercel</b></div>
+  <p style="margin-top:8px">① 打开 <a href="https://vercel.com" target="_blank">vercel.com</a> 注册登录<br>
+  ② New Project → 从 GitHub 导入（先把 deploy 推到你的 GitHub 仓库），或直接用 Vercel CLI 部署<br>
+  ③ 得到 <span class="hl">xxx.vercel.app</span> 网址</p>
+</div>
+
+<div class="step">
+  <div><span class="num">4</span><b>手机：添加到主屏幕（关键一步）</b></div>
+  <p style="margin-top:8px">① 手机浏览器（Safari / Chrome）打开你的网址<br>
+  ② 点浏览器「分享」→ <span class="hl">添加到主屏幕</span><br>
+  ③ 桌面出现图标，以后点它就像用 App，离线也能开</p>
+</div>
+
+<div class="step">
+  <div><span class="num">5</span><b>想保密？</b></div>
+  <p style="margin-top:8px">网址别乱发；或让我给网页加个打开密码。换手机前，记得在网页里点「导出」备份数据。</p>
+</div>
+
+<a class="back" href="index.html">← 返回工作台</a>
+</body>
+</html>

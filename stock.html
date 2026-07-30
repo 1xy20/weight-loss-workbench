@@ -1,0 +1,597 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>备货物流工作台</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icon-192.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<script>if('serviceWorker' in navigator){window.addEventListener('load',function(){navigator.serviceWorker.register('sw.js').catch(function(){});});}</script>
+
+<style>
+:root{
+  --bg:#f2f3f7;--card:#fff;--shadow:0 2px 12px rgba(0,0,0,.06);
+  --txt:#1a1a2e;--sub:#888;--line:#e8e9ed;
+  --green:#16a34a;--blue:#3b82f6;--orange:#f97316;--pink:#ec4899;--red:#dc2626;--purple:#7c3aed;
+  --nav-bg:#fafafa;--nav-active:#eef2ff;--radius:16px;
+}
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;
+  background:var(--bg);color:var(--txt);min-height:100vh;display:flex;overflow:hidden}
+.sidebar{width:74px;min-width:74px;background:var(--nav-bg);border-right:1px solid var(--line);
+  display:flex;flex-direction:column;align-items:center;padding:20px 0 12px;z-index:10}
+.nav-item{display:flex;flex-direction:column;align-items:center;gap:6px;padding:10px 0;cursor:pointer;
+  border-radius:14px;width:60px;text-align:center;color:var(--sub);transition:.15s;font-size:11px;margin-bottom:4px}
+.nav-item .icon{font-size:24px;line-height:1}
+.nav-item.active{background:var(--nav-active);color:var(--blue);font-weight:600}
+.nav-item:hover:not(.active){background:#f0f0f0}
+.main{flex:1;overflow-y:auto;padding:20px 24px 40px;max-width:1100px;margin:0 auto;width:100%}
+.page{display:none}.page.active{display:block}
+.card{background:var(--card);border-radius:var(--radius);padding:20px 22px;box-shadow:var(--shadow);margin-bottom:18px}
+.card h3{font-size:16px;font-weight:700;margin-bottom:14px;display:flex;align-items:center;gap:8px}
+.row{display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;margin-bottom:12px}
+input,select{background:var(--bg);border:1px solid var(--line);color:var(--txt);border-radius:10px;
+  padding:10px 12px;font-size:14px;outline:none;min-width:0;transition:.15s}
+input:focus,select:focus{border-color:var(--blue);box-shadow:0 0 0 3px rgba(59,130,246,.1)}
+.field{display:flex;flex-direction:column;gap:5px;flex:1;min-width:110px}
+.field label{font-size:12px;color:var(--sub);font-weight:500}
+.btn{cursor:pointer;border:none;border-radius:10px;padding:10px 18px;font-size:14px;font-weight:600;
+  background:var(--blue);color:#fff;transition:.15s;white-space:nowrap}
+.btn:hover{filter:brightness(1.05)}
+.btn-green{background:var(--green)}.btn-orange{background:var(--orange)}
+.btn-red{background:var(--red)}.btn-purple{background:var(--purple)}
+.btn-outline{background:transparent;color:var(--sub);border:1px solid var(--line)}
+.btn-outline:hover{background:var(--bg)}
+.btn-sm{padding:7px 13px;font-size:13px}
+.btn-xs{padding:4px 10px;font-size:12px}
+.toast{position:fixed;bottom:30px;left:50%;transform:translateX(-50%) translateY(20px);background:var(--txt);
+  color:#fff;padding:11px 24px;border-radius:30px;font-weight:600;font-size:14px;opacity:0;transition:.25s;
+  pointer-events:none;z-index:99;box-shadow:0 4px 20px rgba(0,0,0,.15)}
+.toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+
+/* stat cards */
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:14px;margin-bottom:18px}
+.stat{background:var(--card);border-radius:var(--radius);padding:16px 18px;box-shadow:var(--shadow);position:relative;overflow:hidden}
+.stat .l{font-size:13px;color:var(--sub);margin-bottom:6px}
+.stat .v{font-size:24px;font-weight:700}
+.stat .v small{font-size:13px;color:var(--sub);font-weight:500}
+.stat .bar{position:absolute;left:0;top:0;bottom:0;width:4px}
+.b1{background:var(--blue)}.b2{background:var(--green)}.b3{background:var(--orange)}.b4{background:var(--purple)}
+
+/* table */
+.tbl{width:100%;border-collapse:collapse;font-size:13px}
+.tbl th{text-align:left;color:var(--sub);font-weight:600;padding:10px 12px;border-bottom:2px solid var(--line);position:sticky;top:0;background:var(--card)}
+.tbl td{padding:10px 12px;border-bottom:1px solid var(--line);vertical-align:middle}
+.tbl tr:hover td{background:#fafafa}
+.tag{display:inline-block;font-size:11px;padding:2px 9px;border-radius:20px;background:var(--bg);color:var(--sub);margin:1px}
+.tag.green{background:rgba(22,163,74,.1);color:var(--green)}
+.tag.blue{background:rgba(59,130,246,.1);color:var(--blue)}
+.tag.orange{background:rgba(249,115,22,.1);color:var(--orange)}
+.tag.red{background:rgba(220,38,38,.1);color:var(--red)}
+.tag.purple{background:rgba(124,58,237,.1);color:var(--purple)}
+.link{color:var(--blue);cursor:pointer;text-decoration:underline;font-size:12px}
+.muted{color:var(--sub);font-size:12px}
+.del{cursor:pointer;color:#ccc;font-weight:700;padding:0 6px}
+.del:hover{color:var(--red)}
+.empty{padding:30px 0;text-align:center;color:var(--sub);font-size:14px}
+
+/* calc page */
+.calc-box{background:linear-gradient(135deg,#eef2ff,#f0fdf4);border-radius:14px;padding:18px;margin-top:14px}
+.calc-line{display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px dashed var(--line);font-size:14px}
+.calc-line .k{color:var(--sub)}.calc-line .vv{font-weight:600}
+.calc-big{display:flex;justify-content:space-between;align-items:baseline;margin-top:14px;padding-top:14px;border-top:2px solid var(--blue)}
+.calc-big .k{font-size:15px;color:var(--txt);font-weight:600}
+.calc-big .vv{font-size:30px;font-weight:800;color:var(--green)}
+.calc-big .vv small{font-size:14px;color:var(--sub);font-weight:500}
+.formula{background:#1e293b;color:#e2e8f0;padding:14px 16px;border-radius:10px;font-size:13px;
+  line-height:1.9;margin-top:14px;font-family:ui-monospace,monospace;overflow-x:auto}
+.formula b{color:#7dd3fc}
+
+@media(max-width:680px){
+  body{flex-direction:column;overflow:auto}
+  .sidebar{width:100%;min-width:unset;flex-direction:row;justify-content:center;padding:10px 0;border-right:none;border-bottom:1px solid var(--line)}
+  .nav-item{flex-direction:row;gap:6px;width:auto;padding:8px 12px;font-size:12px;margin-bottom:0}
+  .nav-item .icon{font-size:18px}
+  .main{max-width:100%;padding:16px 14px 40px}
+}
+</style>
+</head>
+<body>
+
+<nav class="sidebar" id="sidebar">
+  <div class="nav-item active" data-page="home" onclick="switchPage('home')"><span class="icon">📊</span>概览</div>
+  <div class="nav-item" data-page="product" onclick="switchPage('product')"><span class="icon">📦</span>产品档案</div>
+  <div class="nav-item" data-page="purchase" onclick="switchPage('purchase')"><span class="icon">🛒</span>采购记录</div>
+  <div class="nav-item" data-page="ship" onclick="switchPage('ship')"><span class="icon">🚚</span>代发物流</div>
+  <div class="nav-item" data-page="calc" onclick="switchPage('calc')"><span class="icon">💰</span>到仓成本</div>
+  <div class="nav-item" data-page="profit" onclick="switchPage('profit')"><span class="icon">📈</span>利润计算</div>
+  <div class="nav-item" data-page="setting" onclick="switchPage('setting')"><span class="icon">⚙️</span>设置</div>
+</nav>
+
+<div class="main">
+
+<!-- HOME -->
+<div class="page active" id="page-home">
+  <div class="stats" id="homeStats"></div>
+  <div class="card">
+    <h3>📋 最近采购批次</h3>
+    <div id="homePurchases" style="max-height:340px;overflow:auto"></div>
+  </div>
+  <div class="card">
+    <h3>🚚 在途物流</h3>
+    <div id="homeShip"></div>
+  </div>
+</div>
+
+<!-- PRODUCT -->
+<div class="page" id="page-product">
+  <div class="card">
+    <h3>➕ 新增产品</h3>
+    <div class="row">
+      <div class="field"><label>SKU *</label><input id="pSku" placeholder="如 SKU001"></div>
+      <div class="field"><label>名称 *</label><input id="pName" placeholder="如 舒缓冷凝胶"></div>
+      <div class="field"><label>分类</label><input id="pCat" placeholder="如 护肤"></div>
+    </div>
+    <div class="row">
+      <div class="field" style="max-width:140px"><label>单品重量 (kg)</label><input id="pWeight" type="number" step="0.01" placeholder="0.05"></div>
+      <div class="field" style="max-width:110px"><label>长 (cm)</label><input id="pDl" type="number" step="0.1"></div>
+      <div class="field" style="max-width:110px"><label>宽 (cm)</label><input id="pDw" type="number" step="0.1"></div>
+      <div class="field" style="max-width:110px"><label>高 (cm)</label><input id="pDh" type="number" step="0.1"></div>
+      <div class="field"><label>备注</label><input id="pNote" placeholder="可选"></div>
+    </div>
+    <button class="btn btn-green" id="addProduct">保存产品</button>
+  </div>
+  <div class="card">
+    <h3>📦 产品档案（<span id="pCount">0</span>）</h3>
+    <div id="productList" style="overflow:auto"></div>
+  </div>
+</div>
+
+<!-- PURCHASE -->
+<div class="page" id="page-purchase">
+  <div class="card">
+    <h3>➕ 新增采购批次</h3>
+    <div class="row">
+      <div class="field" style="max-width:150px"><label>日期</label><input type="date" id="puDate"></div>
+      <div class="field"><label>产品 (SKU) *</label><select id="puSku"></select></div>
+      <div class="field" style="max-width:130px"><label>采购数量 (件) *</label><input id="puQty" type="number" step="1" placeholder="100"></div>
+      <div class="field" style="max-width:150px"><label>总金额 *</label><input id="puAmount" type="number" step="0.01" placeholder="500"></div>
+      <div class="field"><label>采购运单号</label><input id="puTracking" placeholder="选填"></div>
+    </div>
+    <button class="btn btn-green" id="addPurchase">保存采购</button>
+    <span class="muted" id="puPreview" style="margin-left:10px"></span>
+  </div>
+  <div class="card">
+    <h3>🛒 采购记录（<span id="puCount">0</span> 批）</h3>
+    <div id="purchaseList" style="overflow:auto"></div>
+  </div>
+</div>
+
+<!-- SHIP (代发物流) -->
+<div class="page" id="page-ship">
+  <div class="card">
+    <h3>➕ 新增代发 / 物流费</h3>
+    <div class="row">
+      <div class="field" style="max-width:150px"><label>日期</label><input type="date" id="shDate"></div>
+      <div class="field"><label>运单号 *</label><input id="shTracking" placeholder="代收人发的单号"></div>
+      <div class="field" style="max-width:140px"><label>发运重量 (kg) *</label><input id="shWeight" type="number" step="0.01" placeholder="如 12.5"></div>
+    </div>
+    <div class="row">
+      <div class="field" style="max-width:170px"><label>代收代发费率 (元/kg)</label><input id="shDaiRate" type="number" step="0.1" placeholder="默认6"></div>
+      <div class="field"><label>海防运费</label>
+        <select id="shHpMode"><option value="wt">按重量 (元/kg)</option><option value="amt">直接填金额</option></select>
+      </div>
+      <div class="field" style="max-width:150px"><label>海防运费值</label><input id="shHpVal" type="number" step="0.01" placeholder="费率或金额"></div>
+      <div class="field"><label>状态</label>
+        <select id="shStatus"><option>已下单</option><option>已发货</option><option>运输中</option><option>已到仓</option><option>异常</option></select>
+      </div>
+    </div>
+    <div class="row">
+      <div class="field"><label>物流轨迹 / 备注</label><input id="shTrail" placeholder="粘贴物流更新，或备注"></div>
+    </div>
+    <button class="btn btn-orange" id="addShip">保存代发记录</button>
+    <span class="muted" id="shPreview" style="margin-left:10px"></span>
+  </div>
+  <div class="card">
+    <h3>🚚 代发 / 物流记录（<span id="shCount">0</span> 条）</h3>
+    <div id="shipList" style="overflow:auto"></div>
+  </div>
+</div>
+
+<!-- CALC 到仓成本 -->
+<div class="page" id="page-calc">
+  <div class="card">
+    <h3>💰 到仓成本自动计算</h3>
+    <div class="row">
+      <div class="field"><label>选择采购批次 *</label><select id="calcPu"></select></div>
+    </div>
+    <div class="muted" style="margin:6px 0 12px">勾选对应的代发/物流记录（可多选，费用累加）：</div>
+    <div id="calcShipList" style="max-height:240px;overflow:auto;margin-bottom:8px"></div>
+    <div class="calc-box" id="calcResult">
+      <div class="empty">请选择采购批次与代发记录，自动算出到仓单价</div>
+    </div>
+    <div class="formula" id="calcFormula" style="display:none"></div>
+  </div>
+  <div class="card">
+    <h3>📈 各 SKU 到仓均价（按最近一次）</h3>
+    <div id="calcSummary"></div>
+  </div>
+</div>
+
+<!-- PROFIT 利润计算 -->
+<div class="page" id="page-profit">
+  <div class="card">
+    <h3>📈 利润计算器</h3>
+    <div class="row">
+      <div class="field"><label>关联采购批次（自动带入进货价/重量/数量）</label><select id="pfLink"></select></div>
+      <div class="field" style="max-width:160px"><label>发货渠道</label><input id="pfChannel" value="海防仓"></div>
+    </div>
+    <div class="row">
+      <div class="field" style="max-width:120px"><label>商品数量 *</label><input id="pfQty" type="number" step="1" value="1"></div>
+      <div class="field" style="max-width:150px"><label>进货价 (元/件) *</label><input id="pfCost" type="number" step="0.01" placeholder="到仓单价"></div>
+      <div class="field" style="max-width:130px"><label>商品重量 (kg)</label><input id="pfWeight" type="number" step="0.01"></div>
+      <div class="field" style="max-width:130px"><label>总运费 (元)</label><input id="pfShip" type="number" step="0.01" placeholder="运费÷数量填入"></div>
+    </div>
+    <div class="row">
+      <div class="field" style="max-width:160px"><label>售价 (越南盾 ₫)</label><input id="pfSaleVND" type="number" step="500"></div>
+      <div class="field" style="max-width:120px"><label>平台费率 %</label><input id="pfRate" type="number" step="0.1" value="22"></div>
+      <div class="field" style="max-width:120px"><label>手续费 (元/件)</label><input id="pfFee" type="number" step="0.01" value="0.8"></div>
+      <div class="field" style="max-width:120px"><label>操作费 (元/件)</label><input id="pfOp" type="number" step="0.01" value="1.5"></div>
+    </div>
+    <div class="row">
+      <div class="field" style="max-width:200px"><label>汇率：1元 = ? 越南盾</label><input id="pfRate1" type="number" step="10"></div>
+      <span class="muted">汇率无法实时联网获取，这里手动填（已存于设置）。可点
+        <a class="link" onclick="window.open('https://www.xe.com/currencyconverter/convert/?Amount=1&From=CNY&To=VND','_blank')">查实时汇率</a>
+      </span>
+    </div>
+  </div>
+  <div class="card">
+    <h3>💰 预计利润</h3>
+    <div class="calc-box" id="pfResult"><div class="empty">填写售价等信息后自动计算</div></div>
+  </div>
+  <div class="card">
+    <h3>🔄 汇率换算小工具</h3>
+    <div class="row">
+      <div class="field"><label>越南盾 VND</label><input id="cvVnd" type="number" step="1000"></div>
+      <div class="field"><label>人民币 CNY</label><input id="cvCny" type="number" step="0.01"></div>
+    </div>
+    <p class="muted" id="cvInfo"></p>
+  </div>
+</div>
+
+<!-- SETTING -->
+<div class="page" id="page-setting">
+  <div class="card">
+    <h3>⚙️ 费率与偏好</h3>
+    <div class="row">
+      <div class="field" style="max-width:200px"><label>代收代发费率 (元/kg)</label><input id="setDaiRate" type="number" step="0.1"></div>
+      <div class="field" style="max-width:200px"><label>海防运费默认费率 (元/kg)</label><input id="setHpRate" type="number" step="0.1"></div>
+      <div class="field" style="max-width:140px"><label>货币符号</label><input id="setCur" placeholder="¥"></div>
+      <div class="field" style="max-width:200px"><label>汇率：1元 = ? 越南盾</label><input id="setRateVND" type="number" step="10"></div>
+    </div>
+    <div class="row">
+      <div class="field"><label>物流查询网址模板（用 {no} 代替单号）</label><input id="setTrack" placeholder="https://www.kuaidi100.com/?nu={no}"></div>
+    </div>
+    <button class="btn btn-green" id="saveSetting">保存设置</button>
+  </div>
+  <div class="card">
+    <h3>💾 数据管理</h3>
+    <div style="display:flex;gap:10px;flex-wrap:wrap">
+      <button class="btn btn-outline" id="exportBtn">导出数据</button>
+      <button class="btn btn-outline" id="importBtn">导入数据</button>
+      <button class="btn btn-outline btn-red" id="clearBtn">清空全部数据</button>
+    </div>
+    <p class="muted" style="margin-top:12px;line-height:1.7">
+      数据保存在你浏览器本地（localStorage）。换设备或清缓存会丢失，建议定期导出备份。<br>
+      关于「直接看物流」：本地文件无法实时拉取物流轨迹（需要物流商 API），这里记录单号+状态+轨迹，并用「查物流」按钮跳转官网查询。
+    </p>
+  </div>
+</div>
+
+</div>
+
+<input type="file" id="importFile" accept="application/json" style="display:none">
+<div class="toast" id="toast"></div>
+
+<script>
+const KEY='stockWorkbench_v1';
+const $=id=>document.getElementById(id);
+const fmtD=d=>{const x=new Date(d);return x.getFullYear()+'-'+String(x.getMonth()+1).padStart(2,'0')+'-'+String(x.getDate()).padStart(2,'0')};
+const today=fmtD(new Date());
+
+let data=load();
+function load(){try{return JSON.parse(localStorage.getItem(KEY))||defaultData()}catch(e){return defaultData()}}
+function defaultData(){return{
+  setting:{daiRate:6,hpRate:0,cur:'¥',track:'https://www.kuaidi100.com/?nu={no}',rateVND:3500},
+  products:{},purchases:[],ships:[]
+}}
+function save(){localStorage.setItem(KEY,JSON.stringify(data))}
+function uid(){return Date.now()+''+Math.floor(Math.random()*1000)}
+function cur(){return(data.setting&&data.setting.cur)||'¥'}
+function esc(s){return(s||'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]))}
+function toast(m){const t=$('toast');t.textContent=m;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),1800)}
+
+// ---- nav ----
+function switchPage(p){
+  document.querySelectorAll('.nav-item').forEach(n=>n.classList.toggle('active',n.dataset.page===p));
+  document.querySelectorAll('.page').forEach(pg=>pg.classList.toggle('active',pg.id==='page-'+p));
+  if(p==='home')renderHome();
+  if(p==='product')renderProducts();
+  if(p==='purchase'){fillSkuSelects();renderPurchases();}
+  if(p==='ship')renderShips();
+  if(p==='calc')renderCalc();
+  if(p==='profit')renderProfit();
+}
+function trackUrl(no){(data.setting.track||'').replace('{no}',encodeURIComponent(no));
+  window.open((data.setting.track||'https://www.kuaidi100.com/?nu={no}').replace('{no}',encodeURIComponent(no)),'_blank');}
+
+// ---- init ----
+$('puDate').value=today;$('shDate').value=today;
+applySettingInputs();
+
+// ============ PRODUCTS ============
+$('addProduct').onclick=()=>{
+  const sku=$('pSku').value.trim(),name=$('pName').value.trim();
+  if(!sku||!name){toast('SKU 和名称必填');return;}
+  if(data.products[sku]){toast('SKU 已存在');return;}
+  data.products[sku]={sku,name,cat:$('pCat').value.trim(),weight:+$('pWeight').value||0,
+    dl:+$('pDl').value||0,dw:+$('pDw').value||0,dh:+$('pDh').value||0,note:$('pNote').value.trim()};
+  save();toast('产品已保存');
+  ['pSku','pName','pCat','pWeight','pDl','pDw','pDh','pNote'].forEach(i=>$(i).value='');
+  renderProducts();fillSkuSelects();
+};
+function renderProducts(){
+  const ps=Object.values(data.products);
+  $('pCount').textContent=ps.length;
+  if(!ps.length){$('productList').innerHTML='<div class="empty">还没有产品，先添加一条</div>';return;}
+  let h='<table class="tbl"><thead><tr><th>SKU</th><th>名称</th><th>分类</th><th>重量(kg)</th><th>尺寸(cm)</th><th>备注</th><th></th></tr></thead><tbody>';
+  ps.forEach(p=>{h+=`<tr><td><b>${esc(p.sku)}</b></td><td>${esc(p.name)}</td><td><span class="tag">${esc(p.cat||'—')}</span></td>
+    <td>${p.weight||'—'}</td><td>${p.dl?p.dl+'×'+p.dw+'×'+p.dh:'—'}</td><td class="muted">${esc(p.note||'—')}</td>
+    <td><span class="del" onclick="delProduct('${p.sku}')">✕</span></td></tr>`;});
+  h+='</tbody></table>';$('productList').innerHTML=h;
+}
+function delProduct(sku){delete data.products[sku];save();renderProducts();fillSkuSelects();toast('已删除');}
+
+// ============ PURCHASES ============
+function fillSkuSelects(){
+  const opts='<option value="">— 选择产品 —</option>'+Object.values(data.products).map(p=>`<option value="${p.sku}">${esc(p.sku)} · ${esc(p.name)}</option>`).join('');
+  $('puSku').innerHTML=opts;
+}
+$('puAmount').oninput=$('puQty').oninput=()=>{const a=+$('puAmount').value,q=+$('puQty').value;
+  $('puPreview').textContent=(a&&q)?`采购单价 ≈ ${cur()}${(a/q).toFixed(2)} /件`:'';};
+$('addPurchase').onclick=()=>{
+  const sku=$('puSku').value,date=$('puDate').value,qty=+$('puQty').value,amount=+$('puAmount').value;
+  if(!sku||!qty||!amount){toast('请填产品/数量/金额');return;}
+  data.purchases.push({id:uid(),date,sku,qty,amount,tracking:$('puTracking').value.trim(),note:''});
+  save();toast('采购已保存');
+  $('puQty').value='';$('puAmount').value='';$('puTracking').value='';$('puPreview').textContent='';
+  renderPurchases();
+};
+function renderPurchases(){
+  const ps=data.purchases.slice().sort((a,b)=>b.date.localeCompare(a.date));
+  $('puCount').textContent=ps.length;
+  if(!ps.length){$('purchaseList').innerHTML='<div class="empty">还没有采购记录</div>';return;}
+  let h='<table class="tbl"><thead><tr><th>日期</th><th>产品</th><th>数量</th><th>总金额</th><th>采购单价</th><th>运单号</th><th></th></tr></thead><tbody>';
+  ps.forEach(p=>{const pr=p.amount/p.qty;const pn=data.products[p.sku];
+    h+=`<tr><td>${p.date}</td><td><b>${esc(p.sku)}</b><br><span class="muted">${esc(pn?pn.name:'')}</span></td>
+    <td>${p.qty} 件</td><td>${cur()}${p.amount.toFixed(2)}</td><td><span class="tag green">${cur()}${pr.toFixed(2)}</span></td>
+    <td>${p.tracking?`<span class="link" onclick="trackUrl('${esc(p.tracking)}')">${esc(p.tracking)}</span>`:'<span class="muted">—</span>'}</td>
+    <td><span class="del" onclick="delPurchase('${p.id}')">✕</span></td></tr>`;});
+  h+='</tbody></table>';$('purchaseList').innerHTML=h;
+}
+function delPurchase(id){data.purchases=data.purchases.filter(p=>p.id!==id);save();renderPurchases();toast('已删除');}
+
+// ============ SHIPS (代发物流) ============
+function shipFee(s){
+  const daiRate=s.daiRate??(data.setting.daiRate||6);
+  const daiFee=(s.weight||0)*daiRate;
+  const hpFee=s.hpMode==='wt'?((s.weight||0)*(s.hpVal||0)):(s.hpVal||0);
+  return{daiRate,daiFee,hpFee,total:daiFee+hpFee};
+}
+$('shHpMode').onchange=()=>{$('shHpVal').placeholder=$('shHpMode').value==='wt'?'费率 元/kg':'金额';};
+function shPreview(){
+  const w=+$('shWeight').value||0,dr=+$('shDaiRate').value||data.setting.daiRate||6;
+  const hpv=+$('shHpVal').value||0,mode=$('shHpMode').value;
+  const dai=w*dr,hp=mode==='wt'?w*hpv:hpv;
+  $('shPreview').textContent=(w?`代发费 ${cur()}${dai.toFixed(2)} · 海防 ${cur()}${hp.toFixed(2)} · 合计 ${cur()}${(dai+hp).toFixed(2)}`:'');
+}
+['shWeight','shDaiRate','shHpVal','shHpMode'].forEach(i=>$(i).oninput=shPreview);
+$('addShip').onclick=()=>{
+  const tracking=$('shTracking').value.trim(),weight=+$('shWeight').value;
+  if(!tracking||!weight){toast('请填运单号和重量');return;}
+  const s={id:uid(),date:$('shDate').value,tracking,weight,
+    daiRate:+$('shDaiRate').value||undefined,hpMode:$('shHpMode').value,
+    hpVal:+$('shHpVal').value||0,status:$('shStatus').value,trail:$('shTrail').value.trim()};
+  data.ships.push(s);save();toast('代发记录已保存');
+  ['shTracking','shWeight','shDaiRate','shHpVal','shTrail'].forEach(i=>$(i).value='');
+  $('shDaiRate').value=data.setting.daiRate||'';
+  renderShips();
+};
+function statusTag(st){const m={已下单:'blue',已发货:'orange',运输中:'purple',已到仓:'green',异常:'red'};
+  return `<span class="tag ${m[st]||''}">${st}</span>`;}
+function renderShips(){
+  const ss=data.ships.slice().sort((a,b)=>b.date.localeCompare(a.date));
+  $('shCount').textContent=ss.length;
+  if(!ss.length){$('shipList').innerHTML='<div class="empty">还没有代发/物流记录</div>';return;}
+  let h='<table class="tbl"><thead><tr><th>日期</th><th>运单号</th><th>重量(kg)</th><th>代发费</th><th>海防运费</th><th>合计</th><th>状态</th><th></th></tr></thead><tbody>';
+  ss.forEach(s=>{const f=shipFee(s);
+    h+=`<tr><td>${s.date}</td>
+    <td><span class="link" onclick="trackUrl('${esc(s.tracking)}')">${esc(s.tracking)}</span>${s.trail?`<br><span class="muted">${esc(s.trail.slice(0,20))}</span>`:''}</td>
+    <td>${s.weight}</td><td>${cur()}${f.daiFee.toFixed(2)}</td><td>${cur()}${f.hpFee.toFixed(2)}</td>
+    <td><b>${cur()}${f.total.toFixed(2)}</b></td><td>${statusTag(s.status)}</td>
+    <td><span class="del" onclick="delShip('${s.id}')">✕</span></td></tr>`;});
+  h+='</tbody></table>';$('shipList').innerHTML=h;
+}
+function delShip(id){data.ships=data.ships.filter(s=>s.id!==id);save();renderShips();toast('已删除');}
+
+// ============ CALC 到仓成本 ============
+function renderCalc(){
+  const ps=data.purchases.slice().sort((a,b)=>b.date.localeCompare(a.date));
+  $('calcPu').innerHTML='<option value="">— 选择采购批次 —</option>'+ps.map(p=>{
+    const pn=data.products[p.sku];return `<option value="${p.id}">${p.date} · ${p.sku} · ${p.qty}件 · ${cur()}${p.amount.toFixed(0)}</option>`;}).join('');
+  renderCalcShipOptions();
+  renderCalcResult();
+  renderCalcSummary();
+}
+function renderCalcShipOptions(){
+  const ss=data.ships.slice().sort((a,b)=>b.date.localeCompare(a.date));
+  if(!ss.length){$('calcShipList').innerHTML='<div class="empty">还没有代发记录，先去「代发物流」添加</div>';return;}
+  $('calcShipList').innerHTML=ss.map(s=>{const f=shipFee(s);
+    return `<label style="display:flex;align-items:center;gap:10px;padding:10px 12px;border:1px solid var(--line);border-radius:10px;margin-bottom:8px;cursor:pointer">
+      <input type="checkbox" class="calship" value="${s.id}" onchange="renderCalcResult()">
+      <span style="flex:1"><b>${esc(s.tracking)}</b> · ${s.date} · ${s.weight}kg · ${statusTag(s.status)}</span>
+      <span class="muted">代发 ${cur()}${f.daiFee.toFixed(2)} + 海防 ${cur()}${f.hpFee.toFixed(2)} = <b>${cur()}${f.total.toFixed(2)}</b></span>
+    </label>`;}).join('');
+}
+function renderCalcResult(){
+  const pid=$('calcPu').value;
+  if(!pid){$('calcResult').innerHTML='<div class="empty">请选择采购批次与代发记录</div>';$('calcFormula').style.display='none';return;}
+  const p=data.purchases.find(x=>x.id===pid);if(!p){return;}
+  const checked=[...document.querySelectorAll('.calship:checked')].map(c=>c.value);
+  const ships=checked.map(id=>data.ships.find(s=>s.id===id)).filter(Boolean);
+  const shipTotal=ships.reduce((sum,s)=>sum+shipFee(s).total,0);
+  const toWarehouse=p.amount+shipTotal;
+  const unit=toWarehouse/p.qty;
+  const pn=data.products[p.sku];
+  let h='';
+  h+=`<div class="calc-line"><span class="k">采购：${esc(pn?pn.name:p.sku)} ${p.qty}件</span><span class="vv">${cur()}${p.amount.toFixed(2)}</span></div>`;
+  h+=`<div class="calc-line"><span class="k">代发/物流费（${ships.length}条）</span><span class="vv">${cur()}${shipTotal.toFixed(2)}</span></div>`;
+  ships.forEach(s=>{const f=shipFee(s);h+=`<div class="calc-line" style="padding-left:20px"><span class="k muted">↳ ${esc(s.tracking)} (${s.weight}kg)</span><span class="vv">${cur()}${f.total.toFixed(2)}</span></div>`;});
+  const shipPerItem=ships.length?shipTotal/p.qty:0;
+  h+=`<div class="calc-line"><span class="k">到仓总成本</span><span class="vv">${cur()}${toWarehouse.toFixed(2)}</span></div>`;
+  h+=`<div class="calc-line"><span class="k">↳ 单件应承担运费（总运费÷数量）</span><span class="vv">${cur()}${shipPerItem.toFixed(2)}</span></div>`;
+  h+=`<div class="calc-big"><span class="k">运到海防仓库后的单价</span><span class="vv">${cur()}${unit.toFixed(2)}<small> /件</small></span></div>`;
+  $('calcResult').innerHTML=h;
+  $('calcFormula').style.display='block';
+  $('calcFormula').innerHTML=
+    `到仓总成本 = 采购金额 + 代发物流费<br>`+
+    `&nbsp;&nbsp;= ${cur()}${p.amount.toFixed(2)} + ${cur()}${shipTotal.toFixed(2)} = <b>${cur()}${toWarehouse.toFixed(2)}</b><br>`+
+    `到仓单价 = 到仓总成本 ÷ 采购数量<br>`+
+    `&nbsp;&nbsp;= ${cur()}${toWarehouse.toFixed(2)} ÷ ${p.qty} = <b>${cur()}${unit.toFixed(2)} /件</b><br>`+
+    `其中 代发费 = 重量 × ${cur()}${(data.setting.daiRate||6)}/kg`;
+}
+function renderCalcSummary(){
+  // 每个 SKU 最近一次采购的到仓单价
+  const ps=Object.values(data.products);
+  if(!ps.length||!data.purchases.length){$('calcSummary').innerHTML='<div class="empty">暂无数据</div>';return;}
+  let h='<table class="tbl"><thead><tr><th>SKU</th><th>名称</th><th>最近采购数量</th><th>到仓均价(估)</th></tr></thead><tbody>';
+  ps.forEach(p=>{
+    const pus=data.purchases.filter(x=>x.sku===p.sku).sort((a,b)=>b.date.localeCompare(a.date));
+    if(!pus.length)return;
+    const last=pus[0];
+    // 用该 SKU 最近的代发记录估算
+    const recentShip=data.ships.slice().sort((a,b)=>b.date.localeCompare(a.date))[0];
+    let unitTxt='—';
+    if(recentShip){const f=shipFee(recentShip);const tw=last.amount+f.total;unitTxt=`${cur()}${(tw/last.qty).toFixed(2)}`;}
+    h+=`<tr><td><b>${esc(p.sku)}</b></td><td>${esc(p.name)}</td><td>${last.qty}件</td><td><span class="tag green">${unitTxt}</span></td></tr>`;
+  });
+  h+='</tbody></table>';$('calcSummary').innerHTML=h;
+}
+
+// ============ PROFIT 利润计算器 ============
+function renderProfit(){
+  const ps=data.purchases.slice().sort((a,b)=>b.date.localeCompare(a.date));
+  $('pfLink').innerHTML='<option value="">— 不关联，手动填 —</option>'+ps.map(p=>{
+    const pn=data.products[p.sku];return `<option value="${p.id}">${p.date} · ${p.sku} · ${p.qty}件</option>`;}).join('');
+  $('pfRate1').value=data.setting.rateVND||3500;
+  calcProfit();updateCvInfo();
+}
+function getRate1(){return +$('pfRate1').value||(data.setting.rateVND||3500);}
+function calcProfit(){
+  const qty=Math.max(1,+$('pfQty').value||1);
+  const cost=+$('pfCost').value||0;
+  const totalShip=+$('pfShip').value||0;
+  const saleVND=+$('pfSaleVND').value||0;
+  const rate=+$('pfRate').value||0;
+  const fee=+$('pfFee').value||0;
+  const op=+$('pfOp').value||0;
+  const r1=getRate1();
+  const cnyPerVND=1/r1;
+  const saleCNY=saleVND*cnyPerVND;
+  const platformFee=saleCNY*rate/100;
+  const netIncome=saleCNY-platformFee;
+  const shipPer=totalShip/qty;
+  const costTotal=cost+fee+op+shipPer;
+  const profitPer=netIncome-costTotal;
+  const totalProfit=profitPer*qty;
+  const profitRate=saleCNY?profitPer/saleCNY*100:0;
+  const box=$('pfResult');
+  if(!saleVND){box.innerHTML='<div class="empty">填写售价等信息后自动计算</div>';return;}
+  const isP=profitPer>=0;
+  const col=isP?'var(--green)':'var(--red)';
+  box.innerHTML=`
+    <div class="calc-line"><span class="k">售价（越南盾）</span><span class="vv">${saleVND.toLocaleString()} ₫</span></div>
+    <div class="calc-line"><span class="k">售价（人民币，÷汇率）</span><span class="vv">${cur()}${saleCNY.toFixed(2)}</span></div>
+    <div class="calc-line"><span class="k">平台佣金（${rate}%）</span><span class="vv">${cur()}${platformFee.toFixed(2)}</span></div>
+    <div class="calc-line"><span class="k">单件净收入</span><span class="vv">${cur()}${netIncome.toFixed(2)}</span></div>
+    <div class="calc-line"><span class="k">单件成本（进货${cost.toFixed(2)}+手续费${fee.toFixed(2)}+操作${op.toFixed(2)}+运费${shipPer.toFixed(2)}）</span><span class="vv">${cur()}${costTotal.toFixed(2)}</span></div>
+    <div class="calc-line" style="margin-top:8px"><span class="k">单件利润</span><span class="vv" style="color:${col}">${cur()}${profitPer.toFixed(2)}</span></div>
+    <div class="calc-big"><span class="k">预计总利润（${qty}件）</span><span class="vv" style="color:${col}">${isP?'✅ 盈利 ':'⚠️ 亏损 '}${cur()}${Math.abs(totalProfit).toFixed(2)}</span></div>
+    <div class="calc-line" style="margin-top:10px"><span class="k">利润率（占售价）</span><span class="vv" style="color:${col}">${profitRate.toFixed(1)}%</span></div>`;
+}
+$('pfLink').onchange=()=>{const pid=$('pfLink').value;if(!pid){calcProfit();return;}
+  const p=data.purchases.find(x=>x.id===pid);if(!p){calcProfit();return;}
+  const recent=data.ships.slice().sort((a,b)=>b.date.localeCompare(a.date))[0];
+  let unit=p.amount/p.qty,shipTotal=0;
+  if(recent){const f=shipFee(recent);shipTotal=f.total;unit=(p.amount+shipTotal)/p.qty;}
+  $('pfCost').value=unit.toFixed(2);
+  $('pfQty').value=p.qty;
+  const pn=data.products[p.sku];if(pn&&pn.weight)$('pfWeight').value=pn.weight;
+  $('pfShip').value='';
+  calcProfit();};
+['pfQty','pfCost','pfWeight','pfShip','pfSaleVND','pfRate','pfFee','pfOp','pfRate1','pfChannel'].forEach(i=>{const el=$(i);if(el)el.oninput=calcProfit;});
+function updateCvInfo(){$('cvInfo').textContent=`当前汇率：1 元 ≈ ${getRate1().toLocaleString()} 越南盾（1 ₫ ≈ ${(1/getRate1()).toFixed(6)} 元）`;
+  const v=+$('cvVnd').value||0;$('cvCny').value=v? (v/getRate1()).toFixed(2):'';}
+$('cvVnd').oninput=()=>{const v=+$('cvVnd').value||0;$('cvCny').value=(v/getRate1()).toFixed(2);updateCvInfo();};
+$('cvCny').oninput=()=>{const v=+$('cvCny').value||0;$('cvVnd').value=v?Math.round(v*getRate1()):'';updateCvInfo();};
+
+// ============ HOME ============
+function renderHome(){
+  const ps=Object.values(data.products);
+  const pus=data.purchases;
+  const totalSpend=pus.reduce((s,p)=>s+p.amount,0);
+  const totalQty=pus.reduce((s,p)=>s+p.qty,0);
+  const inTransit=data.ships.filter(s=>s.status!=='已到仓').length;
+  const totalShipFee=data.ships.reduce((s,x)=>s+shipFee(x).total,0);
+  $('homeStats').innerHTML=`
+    <div class="stat"><div class="bar b1"></div><div class="l">产品种类</div><div class="v">${ps.length}<small> 种</small></div></div>
+    <div class="stat"><div class="bar b2"></div><div class="l">采购总支出</div><div class="v">${cur()}${totalSpend.toFixed(0)}</div></div>
+    <div class="stat"><div class="bar b3"></div><div class="l">代发物流总费</div><div class="v">${cur()}${totalShipFee.toFixed(0)}</div></div>
+    <div class="stat"><div class="bar b4"></div><div class="l">在途批次</div><div class="v">${inTransit}<small> 条</small></div></div>
+    <div class="stat"><div class="bar b1"></div><div class="l">累计采购量</div><div class="v">${totalQty}<small> 件</small></div></div>`;
+  const rp=pus.slice().sort((a,b)=>b.date.localeCompare(a.date)).slice(0,8);
+  $('homePurchases').innerHTML=rp.length?('<table class="tbl"><thead><tr><th>日期</th><th>产品</th><th>数量</th><th>金额</th><th>采购单价</th></tr></thead><tbody>'+
+    rp.map(p=>{const pn=data.products[p.sku];return `<tr><td>${p.date}</td><td><b>${esc(p.sku)}</b><br><span class="muted">${esc(pn?pn.name:'')}</span></td><td>${p.qty}件</td><td>${cur()}${p.amount.toFixed(0)}</td><td>${cur()}${(p.amount/p.qty).toFixed(2)}</span></td></tr>`}).join('')+'</tbody></table>')
+    :'<div class="empty">还没有采购记录</div>';
+  const ts=data.ships.filter(s=>s.status!=='已到仓').sort((a,b)=>b.date.localeCompare(a.date)).slice(0,8);
+  $('homeShip').innerHTML=ts.length?('<table class="tbl"><thead><tr><th>运单号</th><th>重量</th><th>费用</th><th>状态</th></tr></thead><tbody>'+
+    ts.map(s=>{const f=shipFee(s);return `<tr><td><span class="link" onclick="trackUrl('${esc(s.tracking)}')">${esc(s.tracking)}</span></td><td>${s.weight}kg</td><td>${cur()}${f.total.toFixed(2)}</td><td>${statusTag(s.status)}</td></tr>`}).join('')+'</tbody></table>')
+    :'<div class="empty">没有在途物流 🎉</div>';
+}
+
+// ============ SETTINGS ============
+function applySettingInputs(){$('setDaiRate').value=data.setting.daiRate??6;$('setHpRate').value=data.setting.hpRate??0;$('setCur').value=data.setting.cur||'¥';$('setRateVND').value=data.setting.rateVND??3500;$('setTrack').value=data.setting.track||'https://www.kuaidi100.com/?nu={no}';}
+$('saveSetting').onclick=()=>{
+  data.setting.daiRate=+$('setDaiRate').value||6;
+  data.setting.hpRate=+$('setHpRate').value||0;
+  data.setting.cur=$('setCur').value.trim()||'¥';
+  data.setting.rateVND=+$('setRateVND').value||3500;
+  data.setting.track=$('setTrack').value.trim()||'https://www.kuaidi100.com/?nu={no}';
+  save();applySettingInputs();toast('设置已保存');
+};
+$('exportBtn').onclick=()=>{const blob=new Blob([JSON.stringify(data,null,2)],{type:'application/json'});
+  const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='备货物流数据_'+today+'.json';a.click();toast('已导出');};
+$('importBtn').onclick=()=>$('importFile').click();
+$('importFile').onchange=e=>{const f=e.target.files[0];if(!f)return;const r=new FileReader();
+  r.onload=()=>{try{const nd=JSON.parse(r.result);if(nd&&nd.products){data=nd;save();renderAll();toast('数据已导入');}}catch(err){toast('文件格式不对');}};
+  r.readAsText(f);e.target.value='';};
+$('clearBtn').onclick=()=>{if(confirm('确定清空全部数据？此操作不可恢复')){data=defaultData();save();renderAll();toast('已清空');}};
+
+// ============ RENDER ALL ============
+function renderAll(){fillSkuSelects();renderProducts();renderPurchases();renderShips();renderHome();renderCalc();renderProfit();}
+renderAll();
+</script>
+</body>
+</html>

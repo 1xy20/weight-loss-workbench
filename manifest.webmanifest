@@ -1,0 +1,22 @@
+{
+  "name": "我的工作台 · 减肥 & 备货",
+  "short_name": "我的工作台",
+  "description": "减肥记录与跨境备货物流管理",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#f2f3f7",
+  "theme_color": "#16a34a",
+  "icons": [
+    {
+      "src": "icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ]
+}
