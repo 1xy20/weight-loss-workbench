@@ -90,11 +90,12 @@ input:focus,select:focus{border-color:var(--blue);box-shadow:0 0 0 3px rgba(59,1
 .formula b{color:#7dd3fc}
 
 @media(max-width:680px){
-  body{flex-direction:column;overflow:auto}
-  .sidebar{width:100%;min-width:unset;flex-direction:row;justify-content:center;padding:10px 0;border-right:none;border-bottom:1px solid var(--line)}
-  .nav-item{flex-direction:row;gap:6px;width:auto;padding:8px 12px;font-size:12px;margin-bottom:0}
+  /* 手机端：导航继续留在左侧（竖排图标），不再变成顶部横条 */
+  body{flex-direction:row;overflow:hidden}
+  .sidebar{width:62px;min-width:62px;padding:14px 0;overflow-y:auto}
+  .nav-item{flex-direction:column;gap:3px;width:50px;padding:8px 0;font-size:8.5px;margin-bottom:2px}
   .nav-item .icon{font-size:18px}
-  .main{max-width:100%;padding:16px 14px 40px}
+  .main{max-width:100%;padding:14px 12px 32px}
 }
 </style>
 </head>
