@@ -18,16 +18,17 @@
   --nav-bg:#fafafa;--nav-active:#eef2ff;--radius:16px;
 }
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+html,body{height:100%}
 body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;
-  background:var(--bg);color:var(--txt);min-height:100vh;display:flex;overflow:hidden}
+  background:var(--bg);color:var(--txt);height:100%;display:flex;overflow:hidden}
 .sidebar{width:74px;min-width:74px;background:var(--nav-bg);border-right:1px solid var(--line);
-  display:flex;flex-direction:column;align-items:center;padding:20px 0 12px;z-index:10}
+  display:flex;flex-direction:column;align-items:center;padding:20px 0 12px;z-index:10;min-height:0}
 .nav-item{display:flex;flex-direction:column;align-items:center;gap:6px;padding:10px 0;cursor:pointer;
   border-radius:14px;width:60px;text-align:center;color:var(--sub);transition:.15s;font-size:11px;margin-bottom:4px}
 .nav-item .icon{font-size:24px;line-height:1}
 .nav-item.active{background:var(--nav-active);color:var(--blue);font-weight:600}
 .nav-item:hover:not(.active){background:#f0f0f0}
-.main{flex:1;overflow-y:auto;padding:20px 24px 40px;max-width:1100px;margin:0 auto;width:100%;-webkit-overflow-scrolling:touch}
+.main{flex:1;overflow-y:auto;min-height:0;padding:20px 24px 40px;max-width:1100px;margin:0 auto;width:100%;-webkit-overflow-scrolling:touch}
 .page{display:none}.page.active{display:block}
 .card{background:var(--card);border-radius:var(--radius);padding:20px 22px;box-shadow:var(--shadow);margin-bottom:18px}
 .card h3{font-size:16px;font-weight:700;margin-bottom:14px;display:flex;align-items:center;gap:8px}
