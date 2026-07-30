@@ -374,6 +374,19 @@ function renderProducts(){
   const ps=Object.values(data.products);
   $('pCount').textContent=ps.length;
   if(!ps.length){$('productList').innerHTML='<div class="empty">还没有产品，先添加一条</div>';return;}
+  if(window.innerWidth<=680){
+    let h='';
+    ps.forEach(p=>{const boxTxt=(p.boxQty||p.boxWeight||p.boxL)?`${p.boxWeight?p.boxWeight+'g':''}${p.boxQty?' · '+p.boxQty+'件':''}${p.boxL?' · '+p.boxL+'×'+p.boxW+'×'+p.boxH+'cm':''}`:'—';
+      h+=`<div class="rec-card">
+        <div class="rec-top"><b>${esc(p.sku)}</b> ${p.name?`<span class="muted">${esc(p.name)}</span>`:''} <span class="del" onclick="delProduct('${p.sku}')">✕</span></div>
+        <div class="rec-row"><span>分类</span><span>${esc(p.cat||'—')}</span></div>
+        <div class="rec-row"><span>单品重量</span><span>${p.weight||'—'} g</span></div>
+        <div class="rec-row"><span>单品尺寸</span><span>${p.dl?p.dl+'×'+p.dw+'×'+p.dh+' cm':'—'}</span></div>
+        <div class="rec-row"><span>箱规</span><span>${boxTxt}</span></div>
+        ${p.note?`<div class="rec-trail">备注：${esc(p.note)}</div>`:''}
+      </div>`;});
+    $('productList').innerHTML=h;return;
+  }
   let h='<table class="tbl"><thead><tr><th>SKU</th><th>名称</th><th>分类</th><th>重量(g)</th><th>单品尺寸(cm)</th><th>箱规</th><th>备注</th><th></th></tr></thead><tbody>';
   ps.forEach(p=>{const boxTxt=(p.boxQty||p.boxWeight||p.boxL)?`${p.boxWeight?p.boxWeight+'g':''}${p.boxQty?' / '+p.boxQty+'件':''}${p.boxL?' / '+p.boxL+'×'+p.boxW+'×'+p.boxH+'cm':''}`:'—';
     h+=`<tr><td><b>${esc(p.sku)}</b></td><td>${esc(p.name)}</td><td><span class="tag">${esc(p.cat||'—')}</span></td>
@@ -402,6 +415,19 @@ function renderPurchases(){
   const ps=data.purchases.slice().sort((a,b)=>b.date.localeCompare(a.date));
   $('puCount').textContent=ps.length;
   if(!ps.length){$('purchaseList').innerHTML='<div class="empty">还没有采购记录</div>';return;}
+  if(window.innerWidth<=680){
+    let h='';
+    ps.forEach(p=>{const pr=p.amount/p.qty;const pn=data.products[p.sku];
+      h+=`<div class="rec-card">
+        <div class="rec-top"><b>${esc(p.sku)}</b> ${pn?`<span class="muted">${esc(pn.name)}</span>`:''} <span class="del" onclick="delPurchase('${p.id}')">✕</span></div>
+        <div class="rec-row"><span>日期</span><span>${p.date}</span></div>
+        <div class="rec-row"><span>数量</span><span>${p.qty} 件</span></div>
+        <div class="rec-row"><span>总金额</span><span>${cur()}${p.amount.toFixed(2)}</span></div>
+        <div class="rec-row"><span>采购单价</span><span><span class="tag green">${cur()}${pr.toFixed(2)}</span></span></div>
+        <div class="rec-row"><span>运单号</span><span>${p.tracking?`<span class="link" onclick="trackUrl('${esc(p.tracking)}')">${esc(p.tracking)}</span>`:'<span class="muted">—</span>'}</span></div>
+      </div>`;});
+    $('purchaseList').innerHTML=h;return;
+  }
   let h='<table class="tbl"><thead><tr><th>日期</th><th>产品</th><th>数量</th><th>总金额</th><th>采购单价</th><th>运单号</th><th></th></tr></thead><tbody>';
   ps.forEach(p=>{const pr=p.amount/p.qty;const pn=data.products[p.sku];
     h+=`<tr><td>${p.date}</td><td><b>${esc(p.sku)}</b><br><span class="muted">${esc(pn?pn.name:'')}</span></td>
@@ -453,9 +479,10 @@ function renderShips(){
     // 手机端：竖排卡片，只上下滑，解决宽表格横滑划不动
     let h='';
     ss.forEach(s=>{const f=shipFee(s);
-      let unitTxt='—';
+      let unitTxt='—',perItemTxt='—';
       if(s.puId){const pu=data.purchases.find(x=>x.id===s.puId);
-        if(pu&&pu.qty){const up=(pu.amount+f.total)/pu.qty;unitTxt=`${cur()}${up.toFixed(2)} <span class="muted" style="font-size:11px">/件（${pu.qty}件）</span>`;}}
+        if(pu&&pu.qty){const up=(pu.amount+f.total)/pu.qty;unitTxt=`${cur()}${up.toFixed(2)} <span class="muted" style="font-size:11px">/件（${pu.qty}件）</span>`;
+          const pi=f.total/pu.qty;perItemTxt=`${cur()}${pi.toFixed(2)} <span class="muted" style="font-size:11px">/件（${pu.qty}件）</span>`;}}
       h+=`<div class="rec-card">
         <div class="rec-top"><span class="link" onclick="trackUrl('${esc(s.tracking)}')">${esc(s.tracking)}</span>${statusTag(s.status)}<span class="del" onclick="delShip('${s.id}')">✕</span></div>
         <div class="rec-row"><span>日期</span><span>${s.date}</span></div>
@@ -464,19 +491,21 @@ function renderShips(){
         <div class="rec-row"><span>海防运费</span><span>${cur()}${f.hpFee.toFixed(2)}</span></div>
         <div class="rec-row"><span>合计</span><span><b>${cur()}${f.total.toFixed(2)}</b></span></div>
         <div class="rec-row"><span>含物流费单价</span><span>${unitTxt}</span></div>
+        <div class="rec-row"><span>单件物流费(不含采购价)</span><span>${perItemTxt}</span></div>
         ${s.trail?`<div class="rec-trail">轨迹：${esc(s.trail)}</div>`:''}
       </div>`;});
     $('shipList').innerHTML=h;return;
   }
-  let h='<table class="tbl"><thead><tr><th>日期</th><th>运单号</th><th>重量(kg)</th><th>代发费</th><th>海防运费</th><th>合计</th><th>含物流费单价</th><th>状态</th><th></th></tr></thead><tbody>';
+  let h='<table class="tbl"><thead><tr><th>日期</th><th>运单号</th><th>重量(kg)</th><th>代发费</th><th>海防运费</th><th>合计</th><th>含物流费单价</th><th>单件物流费<br><span class="muted" style="font-weight:400;font-size:11px">(不含采购价)</span></th><th>状态</th><th></th></tr></thead><tbody>';
   ss.forEach(s=>{const f=shipFee(s);
-    let unitTxt='—';
+    let unitTxt='—',perItemTxt='—';
     if(s.puId){const pu=data.purchases.find(x=>x.id===s.puId);
-      if(pu&&pu.qty){const up=(pu.amount+f.total)/pu.qty;unitTxt=`${cur()}${up.toFixed(2)}<br><span class="muted" style="font-size:11px">/件（${pu.qty}件）</span>`;}}
+      if(pu&&pu.qty){const up=(pu.amount+f.total)/pu.qty;unitTxt=`${cur()}${up.toFixed(2)}<br><span class="muted" style="font-size:11px">/件（${pu.qty}件）</span>`;
+        const pi=f.total/pu.qty;perItemTxt=`${cur()}${pi.toFixed(2)}<br><span class="muted" style="font-size:11px">/件（${pu.qty}件）</span>`;}}
     h+=`<tr><td>${s.date}</td>
     <td><span class="link" onclick="trackUrl('${esc(s.tracking)}')">${esc(s.tracking)}</span>${s.trail?`<br><span class="muted">${esc(s.trail.slice(0,20))}</span>`:''}</td>
     <td>${s.weight}</td><td>${cur()}${f.daiFee.toFixed(2)}</td><td>${cur()}${f.hpFee.toFixed(2)}</td>
-    <td><b>${cur()}${f.total.toFixed(2)}</b></td><td>${unitTxt}</td><td>${statusTag(s.status)}</td>
+    <td><b>${cur()}${f.total.toFixed(2)}</b></td><td>${unitTxt}</td><td>${perItemTxt}</td><td>${statusTag(s.status)}</td>
     <td><span class="del" onclick="delShip('${s.id}')">✕</span></td></tr>`;});
   h+='</tbody></table>';$('shipList').innerHTML=h;
 }
@@ -617,14 +646,41 @@ function renderHome(){
     <div class="stat"><div class="bar b3"></div><div class="l">代发物流总费</div><div class="v">${cur()}${totalShipFee.toFixed(0)}</div></div>
     <div class="stat"><div class="bar b4"></div><div class="l">在途批次</div><div class="v">${inTransit}<small> 条</small></div></div>
     <div class="stat"><div class="bar b1"></div><div class="l">累计采购量</div><div class="v">${totalQty}<small> 件</small></div></div>`;
-  const rp=pus.slice().sort((a,b)=>b.date.localeCompare(a.date)).slice(0,8);
-  $('homePurchases').innerHTML=rp.length?('<table class="tbl"><thead><tr><th>日期</th><th>产品</th><th>数量</th><th>金额</th><th>采购单价</th></tr></thead><tbody>'+
-    rp.map(p=>{const pn=data.products[p.sku];return `<tr><td>${p.date}</td><td><b>${esc(p.sku)}</b><br><span class="muted">${esc(pn?pn.name:'')}</span></td><td>${p.qty}件</td><td>${cur()}${p.amount.toFixed(0)}</td><td>${cur()}${(p.amount/p.qty).toFixed(2)}</span></td></tr>`}).join('')+'</tbody></table>')
-    :'<div class="empty">还没有采购记录</div>';
-  const ts=data.ships.filter(s=>s.status!=='已到仓').sort((a,b)=>b.date.localeCompare(a.date)).slice(0,8);
-  $('homeShip').innerHTML=ts.length?('<table class="tbl"><thead><tr><th>运单号</th><th>重量</th><th>费用</th><th>状态</th></tr></thead><tbody>'+
-    ts.map(s=>{const f=shipFee(s);return `<tr><td><span class="link" onclick="trackUrl('${esc(s.tracking)}')">${esc(s.tracking)}</span></td><td>${s.weight}kg</td><td>${cur()}${f.total.toFixed(2)}</td><td>${statusTag(s.status)}</td></tr>`}).join('')+'</tbody></table>')
-    :'<div class="empty">没有在途物流 🎉</div>';
+  const rpAll=pus.slice().sort((a,b)=>b.date.localeCompare(a.date));
+  const rp=rpAll.slice(0,8);
+  let hp='';
+  if(!rp.length){hp='<div class="empty">还没有采购记录</div>';}
+  else if(window.innerWidth<=680){
+    hp=rp.map(p=>{const pn=data.products[p.sku];return `<div class="rec-card">
+      <div class="rec-top"><b>${esc(p.sku)}</b> ${pn?`<span class="muted">${esc(pn.name)}</span>`:''}</div>
+      <div class="rec-row"><span>日期</span><span>${p.date}</span></div>
+      <div class="rec-row"><span>数量</span><span>${p.qty} 件</span></div>
+      <div class="rec-row"><span>金额</span><span>${cur()}${p.amount.toFixed(0)}</span></div>
+      <div class="rec-row"><span>采购单价</span><span><span class="tag green">${cur()}${(p.amount/p.qty).toFixed(2)}</span></span></div>
+    </div>`;}).join('');
+  }else{
+    hp='<table class="tbl"><thead><tr><th>日期</th><th>产品</th><th>数量</th><th>金额</th><th>采购单价</th></tr></thead><tbody>'+
+      rp.map(p=>{const pn=data.products[p.sku];return `<tr><td>${p.date}</td><td><b>${esc(p.sku)}</b><br><span class="muted">${esc(pn?pn.name:'')}</span></td><td>${p.qty}件</td><td>${cur()}${p.amount.toFixed(0)}</td><td>${cur()}${(p.amount/p.qty).toFixed(2)}</span></td></tr>`}).join('')+'</tbody></table>';
+  }
+  if(rpAll.length>8){hp+=`<div style="text-align:right;padding:8px 2px"><span class="link" onclick="switchPage('purchase')">查看全部 ${rpAll.length} 条采购 →</span></div>`;}
+  $('homePurchases').innerHTML=hp;
+
+  const tsAll=data.ships.filter(s=>s.status!=='已到仓').sort((a,b)=>b.date.localeCompare(a.date));
+  const ts=tsAll.slice(0,8);
+  let hs='';
+  if(!ts.length){hs='<div class="empty">没有在途物流 🎉</div>';}
+  else if(window.innerWidth<=680){
+    hs=ts.map(s=>{const f=shipFee(s);return `<div class="rec-card">
+      <div class="rec-top"><span class="link" onclick="trackUrl('${esc(s.tracking)}')">${esc(s.tracking)}</span>${statusTag(s.status)}</div>
+      <div class="rec-row"><span>重量</span><span>${s.weight} kg</span></div>
+      <div class="rec-row"><span>费用</span><span>${cur()}${f.total.toFixed(2)}</span></div>
+    </div>`;}).join('');
+  }else{
+    hs='<table class="tbl"><thead><tr><th>运单号</th><th>重量</th><th>费用</th><th>状态</th></tr></thead><tbody>'+
+      ts.map(s=>{const f=shipFee(s);return `<tr><td><span class="link" onclick="trackUrl('${esc(s.tracking)}')">${esc(s.tracking)}</span></td><td>${s.weight}kg</td><td>${cur()}${f.total.toFixed(2)}</td><td>${statusTag(s.status)}</td></tr>`}).join('')+'</tbody></table>';
+  }
+  if(tsAll.length>8){hs+=`<div style="text-align:right;padding:8px 2px"><span class="link" onclick="switchPage('ship')">查看全部 ${tsAll.length} 条在途 →</span></div>`;}
+  $('homeShip').innerHTML=hs;
 }
 
 // ============ SETTINGS ============
