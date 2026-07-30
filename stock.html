@@ -27,7 +27,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Micr
 .nav-item .icon{font-size:24px;line-height:1}
 .nav-item.active{background:var(--nav-active);color:var(--blue);font-weight:600}
 .nav-item:hover:not(.active){background:#f0f0f0}
-.main{flex:1;overflow-y:auto;padding:20px 24px 40px;max-width:1100px;margin:0 auto;width:100%}
+.main{flex:1;overflow-y:auto;padding:20px 24px 40px;max-width:1100px;margin:0 auto;width:100%;-webkit-overflow-scrolling:touch}
 .page{display:none}.page.active{display:block}
 .card{background:var(--card);border-radius:var(--radius);padding:20px 22px;box-shadow:var(--shadow);margin-bottom:18px}
 .card h3{font-size:16px;font-weight:700;margin-bottom:14px;display:flex;align-items:center;gap:8px}
@@ -76,6 +76,16 @@ input:focus,select:focus{border-color:var(--blue);box-shadow:0 0 0 3px rgba(59,1
 .del{cursor:pointer;color:#ccc;font-weight:700;padding:0 6px}
 .del:hover{color:var(--red)}
 .empty{padding:30px 0;text-align:center;color:var(--sub);font-size:14px}
+
+/* 手机端记录卡片：替代宽表格，避免横向划不动 */
+.rec-card{background:var(--bg);border:1px solid var(--line);border-radius:12px;padding:12px 14px;margin-bottom:10px}
+.rec-top{display:flex;align-items:center;gap:8px;margin-bottom:8px}
+.rec-top .link{flex:1;font-size:14px;word-break:break-all}
+.rec-row{display:flex;justify-content:space-between;align-items:center;font-size:13px;padding:4px 0;color:var(--sub)}
+.rec-row span:last-child{color:var(--txt);font-weight:600;text-align:right}
+.rec-trail{margin-top:6px;font-size:12px;color:var(--sub);word-break:break-all}
+/* 所有可滚动列表容器：iOS 顺滑滚动 */
+#shipList,#productList,#purchaseList,#calcShipList,#homePurchases,#homeShip{-webkit-overflow-scrolling:touch}
 
 /* calc page */
 .calc-box{background:linear-gradient(135deg,#eef2ff,#f0fdf4);border-radius:14px;padding:18px;margin-top:14px}
@@ -439,6 +449,25 @@ function renderShips(){
   const ss=data.ships.slice().sort((a,b)=>b.date.localeCompare(a.date));
   $('shCount').textContent=ss.length;
   if(!ss.length){$('shipList').innerHTML='<div class="empty">还没有代发/物流记录</div>';return;}
+  if(window.innerWidth<=680){
+    // 手机端：竖排卡片，只上下滑，解决宽表格横滑划不动
+    let h='';
+    ss.forEach(s=>{const f=shipFee(s);
+      let unitTxt='—';
+      if(s.puId){const pu=data.purchases.find(x=>x.id===s.puId);
+        if(pu&&pu.qty){const up=(pu.amount+f.total)/pu.qty;unitTxt=`${cur()}${up.toFixed(2)} <span class="muted" style="font-size:11px">/件（${pu.qty}件）</span>`;}}
+      h+=`<div class="rec-card">
+        <div class="rec-top"><span class="link" onclick="trackUrl('${esc(s.tracking)}')">${esc(s.tracking)}</span>${statusTag(s.status)}<span class="del" onclick="delShip('${s.id}')">✕</span></div>
+        <div class="rec-row"><span>日期</span><span>${s.date}</span></div>
+        <div class="rec-row"><span>发运重量</span><span>${s.weight} kg</span></div>
+        <div class="rec-row"><span>代发费</span><span>${cur()}${f.daiFee.toFixed(2)}</span></div>
+        <div class="rec-row"><span>海防运费</span><span>${cur()}${f.hpFee.toFixed(2)}</span></div>
+        <div class="rec-row"><span>合计</span><span><b>${cur()}${f.total.toFixed(2)}</b></span></div>
+        <div class="rec-row"><span>含物流费单价</span><span>${unitTxt}</span></div>
+        ${s.trail?`<div class="rec-trail">轨迹：${esc(s.trail)}</div>`:''}
+      </div>`;});
+    $('shipList').innerHTML=h;return;
+  }
   let h='<table class="tbl"><thead><tr><th>日期</th><th>运单号</th><th>重量(kg)</th><th>代发费</th><th>海防运费</th><th>合计</th><th>含物流费单价</th><th>状态</th><th></th></tr></thead><tbody>';
   ss.forEach(s=>{const f=shipFee(s);
     let unitTxt='—';
