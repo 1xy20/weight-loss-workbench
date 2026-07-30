@@ -257,6 +257,7 @@ input:focus,select:focus{border-color:var(--blue);box-shadow:0 0 0 3px rgba(59,1
     <div class="row">
       <div class="field" style="max-width:160px"><label>售价 (越南盾 ₫)</label><input id="pfSaleVND" type="number" step="500"></div>
       <div class="field" style="max-width:120px"><label>平台费率 %</label><input id="pfRate" type="number" step="0.1" value="22"></div>
+      <div class="field" style="max-width:130px"><label>达人佣金率 %</label><input id="pfKol" type="number" step="0.1" value="0" placeholder="如5/6/7/8"></div>
       <div class="field" style="max-width:120px"><label>手续费 (元/件)</label><input id="pfFee" type="number" step="0.01" value="0.8"></div>
       <div class="field" style="max-width:120px"><label>操作费 (元/件)</label><input id="pfOp" type="number" step="0.01" value="1.5"></div>
     </div>
@@ -270,6 +271,11 @@ input:focus,select:focus{border-color:var(--blue);box-shadow:0 0 0 3px rgba(59,1
   <div class="card">
     <h3>💰 预计利润</h3>
     <div class="calc-box" id="pfResult"><div class="empty">填写售价等信息后自动计算</div></div>
+  </div>
+  <div class="card">
+    <h3>💡 达人佣金试算（自然流 vs 达人 5/6/7/8%）</h3>
+    <p class="muted" style="margin:-4px 0 12px">在自然流基础上，叠加达人抽成（按售价百分比）后，每件还剩多少利润：</p>
+    <div id="pfKolCompare"><div class="empty">填写售价后自动对比</div></div>
   </div>
   <div class="card">
     <h3>🔄 汇率换算小工具</h3>
@@ -591,31 +597,48 @@ function calcProfit(){
   const totalShip=+$('pfShip').value||0;
   const saleVND=+$('pfSaleVND').value||0;
   const rate=+$('pfRate').value||0;
+  const kol=+$('pfKol').value||0;
   const fee=+$('pfFee').value||0;
   const op=+$('pfOp').value||0;
   const r1=getRate1();
   const cnyPerVND=1/r1;
   const saleCNY=saleVND*cnyPerVND;
   const platformFee=saleCNY*rate/100;
-  const netIncome=saleCNY-platformFee;
+  const kolFee=saleCNY*kol/100;
+  const netIncome=saleCNY-platformFee-kolFee;
   const shipPer=totalShip/qty;
   const costTotal=cost+fee+op+shipPer;
   const profitPer=netIncome-costTotal;
   const totalProfit=profitPer*qty;
   const profitRate=saleCNY?profitPer/saleCNY*100:0;
   const box=$('pfResult');
-  if(!saleVND){box.innerHTML='<div class="empty">填写售价等信息后自动计算</div>';return;}
+  if(!saleVND){box.innerHTML='<div class="empty">填写售价等信息后自动计算</div>';$('pfKolCompare').innerHTML='<div class="empty">填写售价后自动对比</div>';return;}
   const isP=profitPer>=0;
   const col=isP?'var(--green)':'var(--red)';
   box.innerHTML=`
     <div class="calc-line"><span class="k">售价（越南盾）</span><span class="vv">${saleVND.toLocaleString()} ₫</span></div>
     <div class="calc-line"><span class="k">售价（人民币，÷汇率）</span><span class="vv">${cur()}${saleCNY.toFixed(2)}</span></div>
     <div class="calc-line"><span class="k">平台佣金（${rate}%）</span><span class="vv">${cur()}${platformFee.toFixed(2)}</span></div>
+    <div class="calc-line"><span class="k">达人佣金（${kol}%）</span><span class="vv">${cur()}${kolFee.toFixed(2)}</span></div>
     <div class="calc-line"><span class="k">单件净收入</span><span class="vv">${cur()}${netIncome.toFixed(2)}</span></div>
     <div class="calc-line"><span class="k">单件成本（进货${cost.toFixed(2)}+手续费${fee.toFixed(2)}+操作${op.toFixed(2)}+运费${shipPer.toFixed(2)}）</span><span class="vv">${cur()}${costTotal.toFixed(2)}</span></div>
-    <div class="calc-line" style="margin-top:8px"><span class="k">单件利润</span><span class="vv" style="color:${col}">${cur()}${profitPer.toFixed(2)}</span></div>
+    <div class="calc-line" style="margin-top:8px"><span class="k">单件利润${kol?`（含达人 ${kol}%）`:''}</span><span class="vv" style="color:${col}">${cur()}${profitPer.toFixed(2)}</span></div>
     <div class="calc-big"><span class="k">预计总利润（${qty}件）</span><span class="vv" style="color:${col}">${isP?'✅ 盈利 ':'⚠️ 亏损 '}${cur()}${Math.abs(totalProfit).toFixed(2)}</span></div>
     <div class="calc-line" style="margin-top:10px"><span class="k">利润率（占售价）</span><span class="vv" style="color:${col}">${profitRate.toFixed(1)}%</span></div>`;
+  // 达人佣金试算表：自然流(0%) + 5/6/7/8%
+  const rates=[0,5,6,7,8];
+  let cmp='<table class="tbl"><thead><tr><th>达人佣金</th><th>单件利润</th><th>总利润('+qty+'件)</th><th>利润率</th></tr></thead><tbody>';
+  rates.forEach(r=>{
+    const ni=saleCNY*(1-rate/100-r/100);
+    const pp=ni-costTotal;
+    const tp=pp*qty;
+    const pr=saleCNY?pp/saleCNY*100:0;
+    const rc=pr>=0?'var(--green)':'var(--red)';
+    const tag=r===0?'<span class="tag blue">自然流</span>':('<span class="tag purple">'+r+'%</span>');
+    cmp+='<tr><td>'+tag+'</td><td style="color:'+rc+';font-weight:600">'+cur()+pp.toFixed(2)+'</td><td style="color:'+rc+'">'+cur()+Math.abs(tp).toFixed(2)+'</td><td style="color:'+rc+'">'+pr.toFixed(1)+'%</td></tr>';
+  });
+  cmp+='</tbody></table>';
+  $('pfKolCompare').innerHTML=cmp;
 }
 $('pfLink').onchange=()=>{const pid=$('pfLink').value;if(!pid){calcProfit();return;}
   const p=data.purchases.find(x=>x.id===pid);if(!p){calcProfit();return;}
@@ -627,7 +650,7 @@ $('pfLink').onchange=()=>{const pid=$('pfLink').value;if(!pid){calcProfit();retu
   const pn=data.products[p.sku];if(pn&&pn.weight)$('pfWeight').value=pn.weight;
   $('pfShip').value='';
   calcProfit();};
-['pfQty','pfCost','pfWeight','pfShip','pfSaleVND','pfRate','pfFee','pfOp','pfRate1','pfChannel'].forEach(i=>{const el=$(i);if(el)el.oninput=calcProfit;});
+['pfQty','pfCost','pfWeight','pfShip','pfSaleVND','pfRate','pfKol','pfFee','pfOp','pfRate1','pfChannel'].forEach(i=>{const el=$(i);if(el)el.oninput=calcProfit;});
 function updateCvInfo(){$('cvInfo').textContent=`当前汇率：1 元 ≈ ${getRate1().toLocaleString()} 越南盾（1 ₫ ≈ ${(1/getRate1()).toFixed(6)} 元）`;
   const v=+$('cvVnd').value||0;$('cvCny').value=v? (v/getRate1()).toFixed(2):'';}
 $('cvVnd').oninput=()=>{const v=+$('cvVnd').value||0;$('cvCny').value=(v/getRate1()).toFixed(2);updateCvInfo();};
