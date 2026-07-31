@@ -540,7 +540,7 @@ function renderCalc(){
   const q=($('calcSearch').value||'').trim().toLowerCase();
   const selPid=$('calcPu').value;
   let ps=data.purchases.slice().sort((a,b)=>b.date.localeCompare(a.date));
-  if(q)ps=ps.filter(p=>(p.sku||'').toLowerCase().includes(q)||(data.products[p.sku]?.name||'').toLowerCase().includes(q));
+  if(q){const m=ps.filter(p=>(p.sku||'').toLowerCase().includes(q)||(data.products[p.sku]?.name||'').toLowerCase().includes(q));if(m.length)ps=m;}
   if(selPid&&!ps.find(p=>p.id===selPid)){const sp=data.purchases.find(x=>x.id===selPid);if(sp)ps.unshift(sp);}
   $('calcPu').innerHTML='<option value="">— 选择采购批次 —</option>'+ps.map(p=>{
     const pn=data.products[p.sku];return `<option value="${p.id}">${p.date} · ${p.sku} · ${p.qty}件 · ${cur()}${p.amount.toFixed(0)}</option>`;}).join('');
@@ -564,10 +564,20 @@ function renderCalcShipOptions(){
       <span class="muted">代发 ${cur()}${f.daiFee.toFixed(2)} + 海防 ${cur()}${f.hpFee.toFixed(2)} = <b>${cur()}${f.total.toFixed(2)}</b></span>
     </label>`;}).join('');
 }
-function onCalcCheck(id,el){if(el.checked)calcSel.add(id);else calcSel.delete(id);renderCalcResult();}
+function onCalcCheck(id,el){
+  if(el.checked)calcSel.add(id);else calcSel.delete(id);
+  if(el.checked&&!$('calcPu').value){
+    const s=data.ships.find(x=>x.id===id);
+    if(s){let pid=s.puId;if(!pid&&s.sku){const ps=data.purchases.filter(p=>p.sku===s.sku).sort((a,b)=>b.date.localeCompare(a.date));if(ps[0])pid=ps[0].id;}if(pid)$('calcPu').value=pid;}
+  }
+  renderCalc();
+}
 function renderCalcResult(){
   const pid=$('calcPu').value;
-  if(!pid){$('calcResult').innerHTML='<div class="empty">请选择采购批次，再勾选对应的代发记录</div>';$('calcFormula').style.display='none';return;}
+  if(!pid){
+    const orphan=[...calcSel].map(id=>data.ships.find(s=>s.id===id)).filter(Boolean).filter(s=>!s.puId&&!s.sku);
+    $('calcResult').innerHTML='<div class="empty">'+(orphan.length?'勾选的运单没有关联 SKU / 采购批次，请到「代发物流」给它补上 SKU，或在上方手动选择采购批次':'直接勾选下面的代发记录即可（会自动带出对应采购批次），也可在上方手动选择')+'</div>';
+    $('calcFormula').style.display='none';return;}
   const p=data.purchases.find(x=>x.id===pid);if(!p){return;}
   let ships=[...calcSel].map(id=>data.ships.find(s=>s.id===id)).filter(Boolean);
   if(p)ships=ships.filter(s=>s.sku===p.sku||s.puId===pid);
