@@ -228,10 +228,11 @@ input:focus,select:focus{border-color:var(--blue);box-shadow:0 0 0 3px rgba(59,1
 <div class="page" id="page-calc">
   <div class="card">
     <h3>💰 到仓成本自动计算</h3>
+    <div style="margin-bottom:10px"><input id="calcSearch" placeholder="🔍 搜 SKU / 运单号，快速定位批次与代发记录" style="width:100%"></div>
     <div class="row">
       <div class="field"><label>选择采购批次 *</label><select id="calcPu"></select></div>
     </div>
-    <div class="muted" style="margin:6px 0 12px">勾选对应的代发/物流记录（可多选，费用累加）：</div>
+    <div class="muted" style="margin:6px 0 12px">选了批次后，下面只显示该 SKU 对应的代发记录；按需要勾选（可多选，费用累加）：</div>
     <div id="calcShipList" style="max-height:240px;overflow:auto;margin-bottom:8px"></div>
     <div class="calc-box" id="calcResult">
       <div class="empty">请选择采购批次与代发记录，自动算出到仓单价</div>
@@ -534,30 +535,42 @@ function renderShips(){
 function delShip(id){data.ships=data.ships.filter(s=>s.id!==id);save();renderShips();toast('已删除');}
 
 // ============ CALC 到仓成本 ============
+let calcSel=new Set();
 function renderCalc(){
-  const ps=data.purchases.slice().sort((a,b)=>b.date.localeCompare(a.date));
+  const q=($('calcSearch').value||'').trim().toLowerCase();
+  const selPid=$('calcPu').value;
+  let ps=data.purchases.slice().sort((a,b)=>b.date.localeCompare(a.date));
+  if(q)ps=ps.filter(p=>(p.sku||'').toLowerCase().includes(q)||(data.products[p.sku]?.name||'').toLowerCase().includes(q));
+  if(selPid&&!ps.find(p=>p.id===selPid)){const sp=data.purchases.find(x=>x.id===selPid);if(sp)ps.unshift(sp);}
   $('calcPu').innerHTML='<option value="">— 选择采购批次 —</option>'+ps.map(p=>{
     const pn=data.products[p.sku];return `<option value="${p.id}">${p.date} · ${p.sku} · ${p.qty}件 · ${cur()}${p.amount.toFixed(0)}</option>`;}).join('');
+  if(selPid)$('calcPu').value=selPid;
   renderCalcShipOptions();
   renderCalcResult();
   renderCalcSummary();
 }
 function renderCalcShipOptions(){
-  const ss=data.ships.slice().sort((a,b)=>b.date.localeCompare(a.date));
-  if(!ss.length){$('calcShipList').innerHTML='<div class="empty">还没有代发记录，先去「代发物流」添加</div>';return;}
-  $('calcShipList').innerHTML=ss.map(s=>{const f=shipFee(s);
+  const q=($('calcSearch').value||'').trim().toLowerCase();
+  const selPid=$('calcPu').value;
+  const selPu=selPid?data.purchases.find(x=>x.id===selPid):null;
+  let ss=data.ships.slice().sort((a,b)=>b.date.localeCompare(a.date));
+  if(selPu)ss=ss.filter(s=>s.sku===selPu.sku||s.puId===selPid);
+  if(q)ss=ss.filter(s=>(s.sku||'').toLowerCase().includes(q)||(s.tracking||'').toLowerCase().includes(q));
+  if(!ss.length){$('calcShipList').innerHTML='<div class="empty">'+(selPu?'该 SKU 还没有对应的代发记录':(q?'没有匹配的代发记录':'还没有代发记录，先去「代发物流」添加'))+'</div>';return;}
+  $('calcShipList').innerHTML=ss.map(s=>{const f=shipFee(s);const chk=calcSel.has(s.id)?'checked':'';
     return `<label style="display:flex;align-items:center;gap:10px;padding:10px 12px;border:1px solid var(--line);border-radius:10px;margin-bottom:8px;cursor:pointer">
-      <input type="checkbox" class="calship" value="${s.id}" onchange="renderCalcResult()">
+      <input type="checkbox" class="calship" value="${s.id}" ${chk} onchange="onCalcCheck('${s.id}',this)">
       <span style="flex:1"><b>${esc(s.tracking)}</b> · ${s.date} · ${s.weight}kg · ${statusTag(s.status)}</span>
       <span class="muted">代发 ${cur()}${f.daiFee.toFixed(2)} + 海防 ${cur()}${f.hpFee.toFixed(2)} = <b>${cur()}${f.total.toFixed(2)}</b></span>
     </label>`;}).join('');
 }
+function onCalcCheck(id,el){if(el.checked)calcSel.add(id);else calcSel.delete(id);renderCalcResult();}
 function renderCalcResult(){
   const pid=$('calcPu').value;
-  if(!pid){$('calcResult').innerHTML='<div class="empty">请选择采购批次与代发记录</div>';$('calcFormula').style.display='none';return;}
+  if(!pid){$('calcResult').innerHTML='<div class="empty">请选择采购批次，再勾选对应的代发记录</div>';$('calcFormula').style.display='none';return;}
   const p=data.purchases.find(x=>x.id===pid);if(!p){return;}
-  const checked=[...document.querySelectorAll('.calship:checked')].map(c=>c.value);
-  const ships=checked.map(id=>data.ships.find(s=>s.id===id)).filter(Boolean);
+  let ships=[...calcSel].map(id=>data.ships.find(s=>s.id===id)).filter(Boolean);
+  if(p)ships=ships.filter(s=>s.sku===p.sku||s.puId===pid);
   const shipTotal=ships.reduce((sum,s)=>sum+shipFee(s).total,0);
   const toWarehouse=p.amount+shipTotal;
   const unit=toWarehouse/p.qty;
@@ -671,6 +684,8 @@ $('pfPriceMode').onchange=()=>{const on=$('pfPriceMode').value==='kol';$('pfKol'
 $('pSearch').oninput=renderProducts;
 $('puSearch').oninput=renderPurchases;
 $('shSearch').oninput=renderShips;
+$('calcSearch').oninput=()=>{calcSel.clear();renderCalc();};
+$('calcPu').onchange=()=>{calcSel.clear();renderCalc();};
 function updateCvInfo(){$('cvInfo').textContent=`当前汇率：1 元 ≈ ${getRate1().toLocaleString()} 越南盾（1 ₫ ≈ ${(1/getRate1()).toFixed(6)} 元）`;
   const v=+$('cvVnd').value||0;$('cvCny').value=v? (v/getRate1()).toFixed(2):'';}
 $('cvVnd').oninput=()=>{const v=+$('cvVnd').value||0;$('cvCny').value=(v/getRate1()).toFixed(2);updateCvInfo();};
