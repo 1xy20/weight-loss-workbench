@@ -164,6 +164,7 @@ input:focus,select:focus{border-color:var(--blue);box-shadow:0 0 0 3px rgba(59,1
   </div>
   <div class="card">
     <h3>📦 产品档案（<span id="pCount">0</span>）</h3>
+    <div style="margin-bottom:10px"><input id="pSearch" placeholder="🔍 搜 SKU / 名称 / 分类" style="width:100%"></div>
     <div id="productList" style="overflow:auto"></div>
   </div>
 </div>
@@ -184,6 +185,7 @@ input:focus,select:focus{border-color:var(--blue);box-shadow:0 0 0 3px rgba(59,1
   </div>
   <div class="card">
     <h3>🛒 采购记录（<span id="puCount">0</span> 批）</h3>
+    <div style="margin-bottom:10px"><input id="puSearch" placeholder="🔍 搜 SKU" style="width:100%"></div>
     <div id="purchaseList" style="overflow:auto"></div>
   </div>
 </div>
@@ -197,6 +199,7 @@ input:focus,select:focus{border-color:var(--blue);box-shadow:0 0 0 3px rgba(59,1
       <div class="field"><label>运单号 *</label><input id="shTracking" placeholder="代收人发的单号"></div>
       <div class="field" style="max-width:140px"><label>发运重量 (kg) *</label><input id="shWeight" type="number" step="0.01" placeholder="如 12.5"></div>
       <div class="field"><label>关联采购批次</label><select id="shPu"><option value="">— 不关联 —</option></select></div>
+      <div class="field"><label>产品 SKU</label><select id="shSku"><option value="">— 不关联 —</option></select></div>
     </div>
     <div class="row">
       <div class="field" style="max-width:170px"><label>代收代发费率 (元/kg)</label><input id="shDaiRate" type="number" step="0.1" placeholder="默认6"></div>
@@ -216,6 +219,7 @@ input:focus,select:focus{border-color:var(--blue);box-shadow:0 0 0 3px rgba(59,1
   </div>
   <div class="card">
     <h3>🚚 代发 / 物流记录（<span id="shCount">0</span> 条）</h3>
+    <div style="margin-bottom:10px"><input id="shSearch" placeholder="🔍 搜 SKU / 运单号" style="width:100%"></div>
     <div id="shipList" style="overflow:auto"></div>
   </div>
 </div>
@@ -379,9 +383,11 @@ $('addProduct').onclick=()=>{
   renderProducts();fillSkuSelects();
 };
 function renderProducts(){
-  const ps=Object.values(data.products);
+  const q=($('pSearch').value||'').trim().toLowerCase();
+  let ps=Object.values(data.products);
+  if(q)ps=ps.filter(p=>(p.sku||'').toLowerCase().includes(q)||(p.name||'').toLowerCase().includes(q)||(p.cat||'').toLowerCase().includes(q));
   $('pCount').textContent=ps.length;
-  if(!ps.length){$('productList').innerHTML='<div class="empty">还没有产品，先添加一条</div>';return;}
+  if(!ps.length){$('productList').innerHTML='<div class="empty">'+(q?'没有匹配的产品':'还没有产品，先添加一条')+'</div>';return;}
   if(window.innerWidth<=680){
     let h='';
     ps.forEach(p=>{const boxTxt=(p.boxQty||p.boxWeight||p.boxL)?`${p.boxWeight?p.boxWeight+'g':''}${p.boxQty?' · '+p.boxQty+'件':''}${p.boxL?' · '+p.boxL+'×'+p.boxW+'×'+p.boxH+'cm':''}`:'—';
@@ -420,9 +426,11 @@ $('addPurchase').onclick=()=>{
   renderPurchases();
 };
 function renderPurchases(){
-  const ps=data.purchases.slice().sort((a,b)=>b.date.localeCompare(a.date));
+  const q=($('puSearch').value||'').trim().toLowerCase();
+  let ps=data.purchases.slice().sort((a,b)=>b.date.localeCompare(a.date));
+  if(q)ps=ps.filter(p=>(p.sku||'').toLowerCase().includes(q));
   $('puCount').textContent=ps.length;
-  if(!ps.length){$('purchaseList').innerHTML='<div class="empty">还没有采购记录</div>';return;}
+  if(!ps.length){$('purchaseList').innerHTML='<div class="empty">'+(q?'没有匹配的采购记录':'还没有采购记录')+'</div>';return;}
   if(window.innerWidth<=680){
     let h='';
     ps.forEach(p=>{const pr=p.amount/p.qty;const pn=data.products[p.sku];
@@ -454,6 +462,7 @@ function shipFee(s){
   return{daiRate,daiFee,hpFee,total:daiFee+hpFee};
 }
 $('shHpMode').onchange=()=>{$('shHpVal').placeholder=$('shHpMode').value==='wt'?'费率 元/kg':'金额';};
+$('shPu').onchange=()=>{const pid=$('shPu').value;if(pid){const pu=data.purchases.find(x=>x.id===pid);if(pu)$('shSku').value=pu.sku;}};
 function shPreview(){
   const w=+$('shWeight').value||0,dr=+$('shDaiRate').value||data.setting.daiRate||6;
   const hpv=+$('shHpVal').value||0,mode=$('shHpMode').value;
@@ -465,10 +474,11 @@ $('addShip').onclick=()=>{
   const tracking=$('shTracking').value.trim(),weight=+$('shWeight').value;
   if(!tracking||!weight){toast('请填运单号和重量');return;}
   const s={id:uid(),date:$('shDate').value,tracking,weight,puId:$('shPu').value||undefined,
+    sku:$('shSku').value||undefined,
     daiRate:+$('shDaiRate').value||undefined,hpMode:$('shHpMode').value,
     hpVal:+$('shHpVal').value||0,status:$('shStatus').value,trail:$('shTrail').value.trim()};
   data.ships.push(s);save();toast('代发记录已保存');
-  ['shTracking','shWeight','shDaiRate','shHpVal','shTrail'].forEach(i=>$(i).value='');$('shPu').value='';
+  ['shTracking','shWeight','shDaiRate','shHpVal','shTrail'].forEach(i=>$(i).value='');$('shPu').value='';$('shSku').value='';
   $('shDaiRate').value=data.setting.daiRate||'';
   renderShips();
 };
@@ -477,16 +487,19 @@ function statusTag(st){const m={已下单:'blue',已发货:'orange',运输中:'p
 function fillShipPuSelect(){
   const opts='<option value="">— 不关联 —</option>'+data.purchases.slice().sort((a,b)=>b.date.localeCompare(a.date)).map(p=>{const pn=data.products[p.sku];return `<option value="${p.id}">${p.date} · ${p.sku} · ${p.qty}件</option>`;}).join('');
   $('shPu').innerHTML=opts;
+  $('shSku').innerHTML='<option value="">— 不关联 —</option>'+Object.values(data.products).map(p=>`<option value="${p.sku}">${esc(p.sku)} · ${esc(p.name)}</option>`).join('');
 }
 function renderShips(){
   fillShipPuSelect();
-  const ss=data.ships.slice().sort((a,b)=>b.date.localeCompare(a.date));
+  const q=($('shSearch').value||'').trim().toLowerCase();
+  let ss=data.ships.slice().sort((a,b)=>b.date.localeCompare(a.date));
+  if(q)ss=ss.filter(s=>(s.sku||'').toLowerCase().includes(q)||(s.tracking||'').toLowerCase().includes(q));
   $('shCount').textContent=ss.length;
-  if(!ss.length){$('shipList').innerHTML='<div class="empty">还没有代发/物流记录</div>';return;}
+  if(!ss.length){$('shipList').innerHTML='<div class="empty">'+(q?'没有匹配的物流记录':'还没有代发/物流记录')+'</div>';return;}
   if(window.innerWidth<=680){
     // 手机端：竖排卡片，只上下滑，解决宽表格横滑划不动
     let h='';
-    ss.forEach(s=>{const f=shipFee(s);
+    ss.forEach(s=>{const f=shipFee(s);const skuTxt=s.sku||(s.puId?(data.purchases.find(x=>x.id===s.puId)||{}).sku:'')||'—';
       let unitTxt='—',perItemTxt='—';
       if(s.puId){const pu=data.purchases.find(x=>x.id===s.puId);
         if(pu&&pu.qty){const up=(pu.amount+f.total)/pu.qty;unitTxt=`${cur()}${up.toFixed(2)} <span class="muted" style="font-size:11px">/件（${pu.qty}件）</span>`;
@@ -494,6 +507,7 @@ function renderShips(){
       h+=`<div class="rec-card">
         <div class="rec-top"><span class="link" onclick="trackUrl('${esc(s.tracking)}')">${esc(s.tracking)}</span>${statusTag(s.status)}<span class="del" onclick="delShip('${s.id}')">✕</span></div>
         <div class="rec-row"><span>日期</span><span>${s.date}</span></div>
+        <div class="rec-row"><span>产品SKU</span><span>${skuTxt}</span></div>
         <div class="rec-row"><span>发运重量</span><span>${s.weight} kg</span></div>
         <div class="rec-row"><span>代发费</span><span>${cur()}${f.daiFee.toFixed(2)}</span></div>
         <div class="rec-row"><span>海防运费</span><span>${cur()}${f.hpFee.toFixed(2)}</span></div>
@@ -504,13 +518,13 @@ function renderShips(){
       </div>`;});
     $('shipList').innerHTML=h;return;
   }
-  let h='<table class="tbl"><thead><tr><th>日期</th><th>运单号</th><th>重量(kg)</th><th>代发费</th><th>海防运费</th><th>合计</th><th>含物流费单价</th><th>单件物流费<br><span class="muted" style="font-weight:400;font-size:11px">(不含采购价)</span></th><th>状态</th><th></th></tr></thead><tbody>';
+  let h='<table class="tbl"><thead><tr><th>日期</th><th>SKU</th><th>运单号</th><th>重量(kg)</th><th>代发费</th><th>海防运费</th><th>合计</th><th>含物流费单价</th><th>单件物流费<br><span class="muted" style="font-weight:400;font-size:11px">(不含采购价)</span></th><th>状态</th><th></th></tr></thead><tbody>';
   ss.forEach(s=>{const f=shipFee(s);
     let unitTxt='—',perItemTxt='—';
     if(s.puId){const pu=data.purchases.find(x=>x.id===s.puId);
       if(pu&&pu.qty){const up=(pu.amount+f.total)/pu.qty;unitTxt=`${cur()}${up.toFixed(2)}<br><span class="muted" style="font-size:11px">/件（${pu.qty}件）</span>`;
         const pi=f.total/pu.qty;perItemTxt=`${cur()}${pi.toFixed(2)}<br><span class="muted" style="font-size:11px">/件（${pu.qty}件）</span>`;}}
-    h+=`<tr><td>${s.date}</td>
+    h+=`<tr><td>${s.date}</td><td><b>${esc(skuTxt)}</b></td>
     <td><span class="link" onclick="trackUrl('${esc(s.tracking)}')">${esc(s.tracking)}</span>${s.trail?`<br><span class="muted">${esc(s.trail.slice(0,20))}</span>`:''}</td>
     <td>${s.weight}</td><td>${cur()}${f.daiFee.toFixed(2)}</td><td>${cur()}${f.hpFee.toFixed(2)}</td>
     <td><b>${cur()}${f.total.toFixed(2)}</b></td><td>${unitTxt}</td><td>${perItemTxt}</td><td>${statusTag(s.status)}</td>
@@ -654,6 +668,9 @@ $('pfLink').onchange=()=>{const pid=$('pfLink').value;if(!pid){calcProfit();retu
   calcProfit();};
 ['pfQty','pfCost','pfWeight','pfShip','pfSaleVND','pfRate','pfKol','pfFee','pfOp','pfRate1','pfChannel'].forEach(i=>{const el=$(i);if(el)el.oninput=calcProfit;});
 $('pfPriceMode').onchange=()=>{const on=$('pfPriceMode').value==='kol';$('pfKol').disabled=!on;$('pfKol').style.opacity=on?1:.5;if(on&&!$('pfKol').value)$('pfKol').value='5';calcProfit();};
+$('pSearch').oninput=renderProducts;
+$('puSearch').oninput=renderPurchases;
+$('shSearch').oninput=renderShips;
 function updateCvInfo(){$('cvInfo').textContent=`当前汇率：1 元 ≈ ${getRate1().toLocaleString()} 越南盾（1 ₫ ≈ ${(1/getRate1()).toFixed(6)} 元）`;
   const v=+$('cvVnd').value||0;$('cvCny').value=v? (v/getRate1()).toFixed(2):'';}
 $('cvVnd').oninput=()=>{const v=+$('cvVnd').value||0;$('cvCny').value=(v/getRate1()).toFixed(2);updateCvInfo();};
