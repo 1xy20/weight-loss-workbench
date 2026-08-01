@@ -227,20 +227,31 @@ input:focus,select:focus{border-color:var(--blue);box-shadow:0 0 0 3px rgba(59,1
 <!-- CALC 到仓成本 -->
 <div class="page" id="page-calc">
   <div class="card">
-    <h3>💰 到仓成本自动计算</h3>
-    <div style="margin-bottom:10px"><input id="calcSearch" placeholder="🔍 搜 SKU / 运单号，快速定位批次与代发记录" style="width:100%"></div>
+    <h3>💰 到仓成本自动计算（按月合并算平均单价）</h3>
     <div class="row">
-      <div class="field"><label>选择采购批次 *</label><select id="calcPu"></select></div>
+      <div class="field" style="max-width:165px"><label>统计月份</label><input id="calcMonth" type="month"></div>
+      <div class="field" style="max-width:210px"><label>SKU 筛选</label><select id="calcSku"><option value="">全部 SKU</option></select></div>
     </div>
-    <div class="muted" style="margin:6px 0 12px">选了批次后，下面只显示该 SKU 对应的代发记录；按需要勾选（可多选，费用累加）：</div>
-    <div id="calcShipList" style="max-height:240px;overflow:auto;margin-bottom:8px"></div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin:10px 0">
+      <button class="btn btn-sm" id="calcPickAll">✅ 全选当前列表</button>
+      <button class="btn btn-sm btn-outline" id="calcClearSel">清空勾选</button>
+      <button class="btn btn-sm btn-outline" id="calcAllMonth">显示全部月份</button>
+    </div>
+    <div style="margin-bottom:10px"><input id="calcSearch" placeholder="🔍 再搜 SKU / 运单号（可选）" style="width:100%"></div>
+
+    <div class="muted" style="margin:14px 0 6px"><b>① 勾选采购批次</b>（可多选，金额与件数累加）<span id="calcPuCount" class="muted"></span></div>
+    <div id="calcPuList" style="max-height:220px;overflow:auto;margin-bottom:8px"></div>
+
+    <div class="muted" style="margin:14px 0 6px"><b>② 勾选代发物流</b>（可多选，运费累加）<span id="calcShCount" class="muted"></span></div>
+    <div id="calcShipList" style="max-height:220px;overflow:auto;margin-bottom:8px"></div>
+
     <div class="calc-box" id="calcResult">
-      <div class="empty">请选择采购批次与代发记录，自动算出到仓单价</div>
+      <div class="empty">选好月份 → 点「全选当前列表」→ 立刻算出当月平均到仓单价</div>
     </div>
     <div class="formula" id="calcFormula" style="display:none"></div>
   </div>
   <div class="card">
-    <h3>📈 各 SKU 到仓均价（按最近一次）</h3>
+    <h3>📈 各 SKU 到仓均价<span id="calcSumTitle" class="muted" style="font-size:13px;font-weight:400"></span></h3>
     <div id="calcSummary"></div>
   </div>
 </div>
@@ -535,89 +546,161 @@ function renderShips(){
 function delShip(id){data.ships=data.ships.filter(s=>s.id!==id);save();renderShips();toast('已删除');}
 
 // ============ CALC 到仓成本 ============
-let calcSel=new Set();
-function renderCalc(){
-  const q=($('calcSearch').value||'').trim().toLowerCase();
-  const selPid=$('calcPu').value;
+let calcSel=new Set();      // 选中的代发物流记录 id
+let calcPuSel=new Set();    // 选中的采购批次 id
+function monthOf(d){return (d||'').slice(0,7);}
+function calcFilters(){
+  return {q:($('calcSearch').value||'').trim().toLowerCase(),
+          m:$('calcMonth').value||'',
+          sku:$('calcSku').value||''};
+}
+function fillCalcSkuSelect(){
+  const keep=$('calcSku').value;
+  const skus=[...new Set(data.purchases.map(p=>p.sku).filter(Boolean))].sort();
+  $('calcSku').innerHTML='<option value="">全部 SKU</option>'+skus.map(s=>{
+    const pn=data.products[s];return `<option value="${esc(s)}">${esc(s)}${pn?' · '+esc(pn.name):''}</option>`;}).join('');
+  if(keep&&skus.includes(keep))$('calcSku').value=keep;
+}
+function calcDefaultMonth(){
+  // 首次进入：默认最近一次采购所在月份，一进来就有内容
+  if($('calcMonth').value)return;
+  const ps=data.purchases.slice().sort((a,b)=>b.date.localeCompare(a.date));
+  if(ps.length)$('calcMonth').value=monthOf(ps[0].date);
+}
+function filteredCalcPurchases(){
+  const {q,m,sku}=calcFilters();
   let ps=data.purchases.slice().sort((a,b)=>b.date.localeCompare(a.date));
-  if(q){const m=ps.filter(p=>(p.sku||'').toLowerCase().includes(q)||(data.products[p.sku]?.name||'').toLowerCase().includes(q));if(m.length)ps=m;}
-  if(selPid&&!ps.find(p=>p.id===selPid)){const sp=data.purchases.find(x=>x.id===selPid);if(sp)ps.unshift(sp);}
-  $('calcPu').innerHTML='<option value="">— 选择采购批次 —</option>'+ps.map(p=>{
-    const pn=data.products[p.sku];return `<option value="${p.id}">${p.date} · ${p.sku} · ${p.qty}件 · ${cur()}${p.amount.toFixed(0)}</option>`;}).join('');
-  if(selPid)$('calcPu').value=selPid;
+  if(m)ps=ps.filter(p=>monthOf(p.date)===m);
+  if(sku)ps=ps.filter(p=>p.sku===sku);
+  if(q)ps=ps.filter(p=>(p.sku||'').toLowerCase().includes(q)||(data.products[p.sku]?.name||'').toLowerCase().includes(q));
+  return ps;
+}
+function filteredCalcShips(){
+  const {q,m,sku}=calcFilters();
+  let ss=data.ships.slice().sort((a,b)=>b.date.localeCompare(a.date));
+  if(m)ss=ss.filter(s=>monthOf(s.date)===m);
+  if(sku)ss=ss.filter(s=>{
+    if(s.sku)return s.sku===sku;
+    if(s.puId){const p=data.purchases.find(x=>x.id===s.puId);return p&&p.sku===sku;}
+    return false;});
+  if(q)ss=ss.filter(s=>(s.sku||'').toLowerCase().includes(q)||(s.tracking||'').toLowerCase().includes(q));
+  return ss;
+}
+function renderCalc(){
+  fillCalcSkuSelect();
+  calcDefaultMonth();
+  renderCalcPuOptions();
   renderCalcShipOptions();
   renderCalcResult();
   renderCalcSummary();
 }
-function renderCalcShipOptions(){
-  const q=($('calcSearch').value||'').trim().toLowerCase();
-  const selPid=$('calcPu').value;
-  const selPu=selPid?data.purchases.find(x=>x.id===selPid):null;
-  let ss=data.ships.slice().sort((a,b)=>b.date.localeCompare(a.date));
-  if(selPu)ss=ss.filter(s=>s.sku===selPu.sku||s.puId===selPid);
-  if(q)ss=ss.filter(s=>(s.sku||'').toLowerCase().includes(q)||(s.tracking||'').toLowerCase().includes(q));
-  if(!ss.length){$('calcShipList').innerHTML='<div class="empty">'+(selPu?'该 SKU 还没有对应的代发记录':(q?'没有匹配的代发记录':'还没有代发记录，先去「代发物流」添加'))+'</div>';return;}
-  $('calcShipList').innerHTML=ss.map(s=>{const f=shipFee(s);const chk=calcSel.has(s.id)?'checked':'';
+function renderCalcPuOptions(){
+  const ps=filteredCalcPurchases();
+  const nSel=ps.filter(p=>calcPuSel.has(p.id)).length;
+  $('calcPuCount').textContent=ps.length?` — 已选 ${nSel} / ${ps.length} 批`:'';
+  if(!ps.length){$('calcPuList').innerHTML='<div class="empty">该条件下没有采购批次，换个月份或点「显示全部月份」</div>';return;}
+  $('calcPuList').innerHTML=ps.map(p=>{
+    const pn=data.products[p.sku];const chk=calcPuSel.has(p.id)?'checked':'';
     return `<label style="display:flex;align-items:center;gap:10px;padding:10px 12px;border:1px solid var(--line);border-radius:10px;margin-bottom:8px;cursor:pointer">
-      <input type="checkbox" class="calship" value="${s.id}" ${chk} onchange="onCalcCheck('${s.id}',this)">
-      <span style="flex:1"><b>${esc(s.tracking)}</b> · ${s.date} · ${s.weight}kg · ${statusTag(s.status)}</span>
-      <span class="muted">代发 ${cur()}${f.daiFee.toFixed(2)} + 海防 ${cur()}${f.hpFee.toFixed(2)} = <b>${cur()}${f.total.toFixed(2)}</b></span>
+      <input type="checkbox" ${chk} onchange="onCalcPuCheck('${p.id}',this)">
+      <span style="flex:1"><b>${esc(p.sku)}</b>${pn?' · '+esc(pn.name):''} <span class="muted">· ${p.date}</span></span>
+      <span class="muted">${p.qty}件 · <b>${cur()}${p.amount.toFixed(2)}</b></span>
     </label>`;}).join('');
+}
+function renderCalcShipOptions(){
+  const ss=filteredCalcShips();
+  const nSel=ss.filter(s=>calcSel.has(s.id)).length;
+  $('calcShCount').textContent=ss.length?` — 已选 ${nSel} / ${ss.length} 条`:'';
+  if(!ss.length){$('calcShipList').innerHTML='<div class="empty">该条件下没有代发记录（按 SKU 筛选时，运单需先在「代发物流」里关联 SKU）</div>';return;}
+  $('calcShipList').innerHTML=ss.map(s=>{const f=shipFee(s);const chk=calcSel.has(s.id)?'checked':'';
+    const skuTxt=s.sku||(s.puId?(data.purchases.find(x=>x.id===s.puId)||{}).sku:'')||'';
+    return `<label style="display:flex;align-items:center;gap:10px;padding:10px 12px;border:1px solid var(--line);border-radius:10px;margin-bottom:8px;cursor:pointer">
+      <input type="checkbox" ${chk} onchange="onCalcCheck('${s.id}',this)">
+      <span style="flex:1"><b>${esc(s.tracking)}</b>${skuTxt?' <span class="muted">· '+esc(skuTxt)+'</span>':''} <span class="muted">· ${s.date} · ${s.weight}kg</span></span>
+      <span class="muted"><b>${cur()}${f.total.toFixed(2)}</b></span>
+    </label>`;}).join('');
+}
+function updateCalcCounts(){
+  const ps=filteredCalcPurchases(),ss=filteredCalcShips();
+  $('calcPuCount').textContent=ps.length?` — 已选 ${ps.filter(p=>calcPuSel.has(p.id)).length} / ${ps.length} 批`:'';
+  $('calcShCount').textContent=ss.length?` — 已选 ${ss.filter(s=>calcSel.has(s.id)).length} / ${ss.length} 条`:'';
+}
+// 勾选时只刷新计数和结果，不重绘列表 —— 否则滚动位置会跳回顶部
+function onCalcPuCheck(id,el){
+  if(el.checked)calcPuSel.add(id);else calcPuSel.delete(id);
+  updateCalcCounts();renderCalcResult();
 }
 function onCalcCheck(id,el){
   if(el.checked)calcSel.add(id);else calcSel.delete(id);
-  if(el.checked&&!$('calcPu').value){
-    const s=data.ships.find(x=>x.id===id);
-    if(s){let pid=s.puId;if(!pid&&s.sku){const ps=data.purchases.filter(p=>p.sku===s.sku).sort((a,b)=>b.date.localeCompare(a.date));if(ps[0])pid=ps[0].id;}if(pid)$('calcPu').value=pid;}
-  }
-  renderCalc();
+  updateCalcCounts();renderCalcResult();
 }
 function renderCalcResult(){
-  const pid=$('calcPu').value;
-  if(!pid){
-    const orphan=[...calcSel].map(id=>data.ships.find(s=>s.id===id)).filter(Boolean).filter(s=>!s.puId&&!s.sku);
-    $('calcResult').innerHTML='<div class="empty">'+(orphan.length?'勾选的运单没有关联 SKU / 采购批次，请到「代发物流」给它补上 SKU，或在上方手动选择采购批次':'直接勾选下面的代发记录即可（会自动带出对应采购批次），也可在上方手动选择')+'</div>';
+  const pus=[...calcPuSel].map(id=>data.purchases.find(p=>p.id===id)).filter(Boolean)
+              .sort((a,b)=>a.date.localeCompare(b.date));
+  const ships=[...calcSel].map(id=>data.ships.find(s=>s.id===id)).filter(Boolean)
+              .sort((a,b)=>a.date.localeCompare(b.date));
+  if(!pus.length){
+    $('calcResult').innerHTML='<div class="empty">'+(ships.length?'还需要勾选上面的「采购批次」，才能算出单价（要用采购件数当分母）':'选好月份后点「全选当前列表」，或手动勾选采购批次 + 代发物流')+'</div>';
     $('calcFormula').style.display='none';return;}
-  const p=data.purchases.find(x=>x.id===pid);if(!p){return;}
-  let ships=[...calcSel].map(id=>data.ships.find(s=>s.id===id)).filter(Boolean);
-  if(p)ships=ships.filter(s=>s.sku===p.sku||s.puId===pid);
-  const shipTotal=ships.reduce((sum,s)=>sum+shipFee(s).total,0);
-  const toWarehouse=p.amount+shipTotal;
-  const unit=toWarehouse/p.qty;
-  const pn=data.products[p.sku];
+  const amount=pus.reduce((t,p)=>t+(+p.amount||0),0);
+  const qty=pus.reduce((t,p)=>t+(+p.qty||0),0);
+  const shipTotal=ships.reduce((t,s)=>t+shipFee(s).total,0);
+  const toWarehouse=amount+shipTotal;
+  const unit=qty?toWarehouse/qty:0;
+  const buyUnit=qty?amount/qty:0;
+  const shipPerItem=qty?shipTotal/qty:0;
+  const skus=[...new Set(pus.map(p=>p.sku).filter(Boolean))];
+  const mLabel=$('calcMonth').value||'全部月份';
   let h='';
-  h+=`<div class="calc-line"><span class="k">采购：${esc(pn?pn.name:p.sku)} ${p.qty}件</span><span class="vv">${cur()}${p.amount.toFixed(2)}</span></div>`;
-  h+=`<div class="calc-line"><span class="k">代发/物流费（${ships.length}条）</span><span class="vv">${cur()}${shipTotal.toFixed(2)}</span></div>`;
-  ships.forEach(s=>{const f=shipFee(s);h+=`<div class="calc-line" style="padding-left:20px"><span class="k muted">↳ ${esc(s.tracking)} (${s.weight}kg)</span><span class="vv">${cur()}${f.total.toFixed(2)}</span></div>`;});
-  const shipPerItem=ships.length?shipTotal/p.qty:0;
+  if(skus.length>1)h+=`<div class="calc-line" style="background:rgba(245,158,11,.10);border-radius:8px"><span class="k">⚠️ 本次合并了 ${skus.length} 个 SKU（${skus.map(esc).join('、')}），算出的是<b>综合平均单价</b>。想单独看某个 SKU，用上方「SKU 筛选」</span></div>`;
+  h+=`<div class="calc-line"><span class="k">统计范围</span><span class="vv">${esc(mLabel)}${skus.length===1?' · '+esc(skus[0]):''}</span></div>`;
+  h+=`<div class="calc-line"><span class="k">采购合计（${pus.length}批）</span><span class="vv">${cur()}${amount.toFixed(2)} <small>/ ${qty}件</small></span></div>`;
+  pus.forEach(p=>{h+=`<div class="calc-line" style="padding-left:20px"><span class="k muted">↳ ${p.date} ${esc(p.sku)} ${p.qty}件</span><span class="vv muted">${cur()}${(+p.amount||0).toFixed(2)}</span></div>`;});
+  h+=`<div class="calc-line"><span class="k">代发/物流费合计（${ships.length}条）</span><span class="vv">${cur()}${shipTotal.toFixed(2)}</span></div>`;
+  ships.forEach(s=>{const f=shipFee(s);h+=`<div class="calc-line" style="padding-left:20px"><span class="k muted">↳ ${s.date} ${esc(s.tracking)} (${s.weight}kg)</span><span class="vv muted">${cur()}${f.total.toFixed(2)}</span></div>`;});
   h+=`<div class="calc-line"><span class="k">到仓总成本</span><span class="vv">${cur()}${toWarehouse.toFixed(2)}</span></div>`;
-  h+=`<div class="calc-line"><span class="k">↳ 单件应承担运费（总运费÷数量）</span><span class="vv">${cur()}${shipPerItem.toFixed(2)}</span></div>`;
-  h+=`<div class="calc-big"><span class="k">运到海防仓库后的单价</span><span class="vv">${cur()}${unit.toFixed(2)}<small> /件</small></span></div>`;
+  h+=`<div class="calc-line"><span class="k">↳ 单件采购成本（采购÷件数）</span><span class="vv">${cur()}${buyUnit.toFixed(2)}</span></div>`;
+  h+=`<div class="calc-line"><span class="k">↳ 单件应承担运费（运费÷件数）</span><span class="vv">${cur()}${shipPerItem.toFixed(2)}</span></div>`;
+  h+=`<div class="calc-big"><span class="k">运到海防仓后的平均单价</span><span class="vv">${cur()}${unit.toFixed(2)}<small> /件</small></span></div>`;
   $('calcResult').innerHTML=h;
   $('calcFormula').style.display='block';
   $('calcFormula').innerHTML=
-    `到仓总成本 = 采购金额 + 代发物流费<br>`+
-    `&nbsp;&nbsp;= ${cur()}${p.amount.toFixed(2)} + ${cur()}${shipTotal.toFixed(2)} = <b>${cur()}${toWarehouse.toFixed(2)}</b><br>`+
-    `到仓单价 = 到仓总成本 ÷ 采购数量<br>`+
-    `&nbsp;&nbsp;= ${cur()}${toWarehouse.toFixed(2)} ÷ ${p.qty} = <b>${cur()}${unit.toFixed(2)} /件</b><br>`+
-    `其中 代发费 = 重量 × ${cur()}${(data.setting.daiRate||6)}/kg`;
+    `到仓总成本 = 当期采购金额合计 + 当期物流费合计<br>`+
+    `&nbsp;&nbsp;= ${cur()}${amount.toFixed(2)} + ${cur()}${shipTotal.toFixed(2)} = <b>${cur()}${toWarehouse.toFixed(2)}</b><br>`+
+    `平均到仓单价 = 到仓总成本 ÷ 采购总件数<br>`+
+    `&nbsp;&nbsp;= ${cur()}${toWarehouse.toFixed(2)} ÷ ${qty} = <b>${cur()}${unit.toFixed(2)} /件</b><br>`+
+    `其中 代发费 = 重量 × ${cur()}${(data.setting.daiRate||6)}/kg，海防运费按实付计`;
 }
 function renderCalcSummary(){
-  // 每个 SKU 最近一次采购的到仓单价
-  const ps=Object.values(data.products);
-  if(!ps.length||!data.purchases.length){$('calcSummary').innerHTML='<div class="empty">暂无数据</div>';return;}
-  let h='<table class="tbl"><thead><tr><th>SKU</th><th>名称</th><th>最近采购数量</th><th>到仓均价(估)</th></tr></thead><tbody>';
-  ps.forEach(p=>{
-    const pus=data.purchases.filter(x=>x.sku===p.sku).sort((a,b)=>b.date.localeCompare(a.date));
-    if(!pus.length)return;
-    const last=pus[0];
-    // 用该 SKU 最近的代发记录估算
-    const recentShip=data.ships.slice().sort((a,b)=>b.date.localeCompare(a.date))[0];
-    let unitTxt='—';
-    if(recentShip){const f=shipFee(recentShip);const tw=last.amount+f.total;unitTxt=`${cur()}${(tw/last.qty).toFixed(2)}`;}
-    h+=`<tr><td><b>${esc(p.sku)}</b></td><td>${esc(p.name)}</td><td>${last.qty}件</td><td><span class="tag green">${unitTxt}</span></td></tr>`;
+  // 按当前选中月份，分 SKU 统计到仓均价；未关联 SKU 的运费按采购件数比例分摊
+  const m=$('calcMonth').value||'';
+  $('calcSumTitle').textContent=m?`（${m}）`:'（全部月份）';
+  let pus=data.purchases.slice();
+  let sps=data.ships.slice();
+  if(m){pus=pus.filter(p=>monthOf(p.date)===m);sps=sps.filter(s=>monthOf(s.date)===m);}
+  if(!pus.length){$('calcSummary').innerHTML='<div class="empty">该月份没有采购记录</div>';return;}
+  const skuOf=s=>s.sku||(s.puId?((data.purchases.find(x=>x.id===s.puId)||{}).sku||''):'');
+  // 分 SKU 归集采购
+  const g={};
+  pus.forEach(p=>{const k=p.sku||'—';(g[k]=g[k]||{qty:0,amount:0,ship:0,batches:0});
+    g[k].qty+=(+p.qty||0);g[k].amount+=(+p.amount||0);g[k].batches++;});
+  // 归集运费：能对上 SKU 的直接计入，对不上的进池子
+  let pool=0;
+  sps.forEach(s=>{const k=skuOf(s);const fee=shipFee(s).total;
+    if(k&&g[k])g[k].ship+=fee;else pool+=fee;});
+  const totalQty=Object.values(g).reduce((t,x)=>t+x.qty,0);
+  if(pool>0&&totalQty>0)Object.values(g).forEach(x=>{x.ship+=pool*(x.qty/totalQty);});
+  let h='<table class="tbl"><thead><tr><th>SKU</th><th>名称</th><th>采购</th><th>采购额</th><th>运费</th><th>到仓均价</th></tr></thead><tbody>';
+  Object.keys(g).sort().forEach(k=>{
+    const x=g[k];const pn=data.products[k];
+    const unit=x.qty?(x.amount+x.ship)/x.qty:0;
+    h+=`<tr><td><b>${esc(k)}</b></td><td>${esc(pn?pn.name:'—')}</td><td>${x.qty}件<span class="muted" style="font-size:11px">/${x.batches}批</span></td>`+
+       `<td>${cur()}${x.amount.toFixed(0)}</td><td>${cur()}${x.ship.toFixed(0)}</td>`+
+       `<td><span class="tag green">${cur()}${unit.toFixed(2)}</span></td></tr>`;
   });
-  h+='</tbody></table>';$('calcSummary').innerHTML=h;
+  h+='</tbody></table>';
+  if(pool>0)h+=`<div class="muted" style="margin-top:8px;font-size:12px">ℹ️ 有 ${cur()}${pool.toFixed(2)} 运费的运单没关联 SKU，已按各 SKU 采购件数比例分摊。想更准就去「代发物流」给运单补上 SKU。</div>`;
+  $('calcSummary').innerHTML=h;
 }
 
 // ============ PROFIT 利润计算器 ============
@@ -694,8 +777,15 @@ $('pfPriceMode').onchange=()=>{const on=$('pfPriceMode').value==='kol';$('pfKol'
 $('pSearch').oninput=renderProducts;
 $('puSearch').oninput=renderPurchases;
 $('shSearch').oninput=renderShips;
-$('calcSearch').oninput=()=>{calcSel.clear();renderCalc();};
-$('calcPu').onchange=()=>{calcSel.clear();renderCalc();};
+$('calcSearch').oninput=renderCalc;
+$('calcMonth').onchange=()=>{calcSel.clear();calcPuSel.clear();renderCalc();};
+$('calcSku').onchange=()=>{calcSel.clear();calcPuSel.clear();renderCalc();};
+$('calcPickAll').onclick=()=>{
+  filteredCalcPurchases().forEach(p=>calcPuSel.add(p.id));
+  filteredCalcShips().forEach(s=>calcSel.add(s.id));
+  renderCalc();toast('已全选当前列表');};
+$('calcClearSel').onclick=()=>{calcSel.clear();calcPuSel.clear();renderCalc();};
+$('calcAllMonth').onclick=()=>{$('calcMonth').value='';calcSel.clear();calcPuSel.clear();renderCalc();toast('已显示全部月份');};
 function updateCvInfo(){$('cvInfo').textContent=`当前汇率：1 元 ≈ ${getRate1().toLocaleString()} 越南盾（1 ₫ ≈ ${(1/getRate1()).toFixed(6)} 元）`;
   const v=+$('cvVnd').value||0;$('cvCny').value=v? (v/getRate1()).toFixed(2):'';}
 $('cvVnd').oninput=()=>{const v=+$('cvVnd').value||0;$('cvCny').value=(v/getRate1()).toFixed(2);updateCvInfo();};
