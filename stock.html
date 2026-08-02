@@ -343,18 +343,26 @@ const KEY='stockWorkbench_v1';
 const $=id=>document.getElementById(id);
 const fmtD=d=>{const x=new Date(d);return x.getFullYear()+'-'+String(x.getMonth()+1).padStart(2,'0')+'-'+String(x.getDate()).padStart(2,'0')};
 const today=fmtD(new Date());
+const DEF_RATE=3895;   // 默认汇率：1元 = ? 越南盾（必须声明在 load()/migrate() 调用之前）
 
 let data=load();
 migrate();
 function load(){try{return JSON.parse(localStorage.getItem(KEY))||defaultData()}catch(e){return defaultData()}}
 function migrate(){
   // 把历史产品重量从 kg 自动换算成 g（仅一次）
-  if(data.__wMigrated)return;
-  Object.values(data.products||{}).forEach(p=>{if(p&&p.weight)p.weight=Math.round(p.weight*1000);});
-  data.__wMigrated=true;save();
+  if(!data.__wMigrated){
+    Object.values(data.products||{}).forEach(p=>{if(p&&p.weight)p.weight=Math.round(p.weight*1000);});
+    data.__wMigrated=true;save();
+  }
+  // 默认汇率 3500 → 3895（仅一次，且只在你没自己改过的情况下）
+  if(!data.__rateMigrated){
+    data.setting=data.setting||{};
+    if(!data.setting.rateVND||data.setting.rateVND===3500)data.setting.rateVND=DEF_RATE;
+    data.__rateMigrated=true;save();
+  }
 }
 function defaultData(){return{
-  setting:{daiRate:6,hpRate:0,cur:'¥',track:'https://www.kuaidi100.com/?nu={no}',rateVND:3500},
+  setting:{daiRate:6,hpRate:0,cur:'¥',track:'https://www.kuaidi100.com/?nu={no}',rateVND:DEF_RATE},
   products:{},purchases:[],ships:[]
 }}
 function save(){localStorage.setItem(KEY,JSON.stringify(data))}
@@ -708,11 +716,11 @@ function renderProfit(){
   const ps=data.purchases.slice().sort((a,b)=>b.date.localeCompare(a.date));
   $('pfLink').innerHTML='<option value="">— 不关联，手动填 —</option>'+ps.map(p=>{
     const pn=data.products[p.sku];return `<option value="${p.id}">${p.date} · ${p.sku} · ${p.qty}件</option>`;}).join('');
-  $('pfRate1').value=data.setting.rateVND||3500;
+  $('pfRate1').value=data.setting.rateVND||DEF_RATE;
   $('pfKol').disabled=($('pfPriceMode').value!=='kol');$('pfKol').style.opacity=($('pfPriceMode').value==='kol')?1:.5;
   calcProfit();updateCvInfo();
 }
-function getRate1(){return +$('pfRate1').value||(data.setting.rateVND||3500);}
+function getRate1(){return +$('pfRate1').value||(data.setting.rateVND||DEF_RATE);}
 function calcProfit(){
   const qty=Math.max(1,+$('pfQty').value||1);
   const cost=+$('pfCost').value||0;
@@ -843,12 +851,12 @@ function renderHome(){
 }
 
 // ============ SETTINGS ============
-function applySettingInputs(){$('setDaiRate').value=data.setting.daiRate??6;$('setHpRate').value=data.setting.hpRate??0;$('setCur').value=data.setting.cur||'¥';$('setRateVND').value=data.setting.rateVND??3500;$('setTrack').value=data.setting.track||'https://www.kuaidi100.com/?nu={no}';}
+function applySettingInputs(){$('setDaiRate').value=data.setting.daiRate??6;$('setHpRate').value=data.setting.hpRate??0;$('setCur').value=data.setting.cur||'¥';$('setRateVND').value=data.setting.rateVND??DEF_RATE;$('setTrack').value=data.setting.track||'https://www.kuaidi100.com/?nu={no}';}
 $('saveSetting').onclick=()=>{
   data.setting.daiRate=+$('setDaiRate').value||6;
   data.setting.hpRate=+$('setHpRate').value||0;
   data.setting.cur=$('setCur').value.trim()||'¥';
-  data.setting.rateVND=+$('setRateVND').value||3500;
+  data.setting.rateVND=+$('setRateVND').value||DEF_RATE;
   data.setting.track=$('setTrack').value.trim()||'https://www.kuaidi100.com/?nu={no}';
   save();applySettingInputs();toast('设置已保存');
 };
