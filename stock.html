@@ -264,6 +264,7 @@ input:focus,select:focus{border-color:var(--blue);box-shadow:0 0 0 3px rgba(59,1
     <div class="row">
       <div class="field" style="max-width:240px"><label>关联产品（可选，自动带入箱规）</label><select id="frProd"><option value="">— 手动输入 —</option></select></div>
       <div class="field" style="max-width:110px"><label>箱数 *</label><input id="frBoxes" type="number" step="1" value="1"></div>
+      <div class="field" style="max-width:130px"><label>每箱件数（算单件成本）</label><input id="frQty" type="number" step="1" placeholder="选填"></div>
     </div>
     <div class="row">
       <div class="field" style="max-width:110px"><label>单箱长 (cm)</label><input id="frL" type="number" step="0.1"></div>
@@ -275,6 +276,7 @@ input:focus,select:focus{border-color:var(--blue);box-shadow:0 0 0 3px rgba(59,1
       <div class="field" style="max-width:150px"><label>泡比系数</label><input id="frRatio" type="number" step="100" value="6000"></div>
       <div class="field" style="max-width:170px"><label>泡货单价 (元/kg)</label><input id="frVolPrice" type="number" step="0.1" placeholder="按体积重计费"></div>
       <div class="field" style="max-width:170px"><label>重货单价 (元/kg)</label><input id="frWtPrice" type="number" step="0.1" placeholder="按实重计费"></div>
+      <div class="field" style="max-width:150px"><label>其他附加费 (元/票)</label><input id="frExtra" type="number" step="1" placeholder="报关/提送等"></div>
     </div>
     <div style="display:flex;gap:8px;flex-wrap:wrap;margin:10px 0">
       <button class="btn btn-sm" id="frCalc">🚢 计算头程运费</button>
@@ -434,7 +436,7 @@ $('addProduct').onclick=()=>{
     boxWeight:+$('pBoxWt').value||0,boxQty:+$('pBoxQty').value||0};
   save();toast('产品已保存');
   ['pSku','pName','pCat','pWeight','pDl','pDw','pDh','pNote','pBoxL','pBoxW','pBoxH','pBoxWt','pBoxQty'].forEach(i=>$(i).value='');
-  renderProducts();fillSkuSelects();
+  renderProducts();fillSkuSelects();fillFreightProducts();
 };
 function renderProducts(){
   const q=($('pSearch').value||'').trim().toLowerCase();
@@ -462,7 +464,7 @@ function renderProducts(){
     <td><span class="del" onclick="delProduct('${p.sku}')">✕</span></td></tr>`;});
   h+='</tbody></table>';$('productList').innerHTML=h;
 }
-function delProduct(sku){delete data.products[sku];save();renderProducts();fillSkuSelects();toast('已删除');}
+function delProduct(sku){delete data.products[sku];save();renderProducts();fillSkuSelects();fillFreightProducts();toast('已删除');}
 
 // ============ PURCHASES ============
 function fillSkuSelects(){
@@ -886,8 +888,8 @@ function renderHome(){
 
 // ============ FREIGHT 头程运费 ============
 function frSetting(){data.setting.freight=data.setting.freight||{};return data.setting.freight}
-function applyFreightInputs(){const f=frSetting();$('frRatio').value=f.ratio||6000;$('frVolPrice').value=f.volPrice||'';$('frWtPrice').value=f.wtPrice||'';}
-function saveFreightInputs(){const f=frSetting();f.ratio=+$('frRatio').value||6000;f.volPrice=$('frVolPrice').value;f.wtPrice=$('frWtPrice').value;save();}
+function applyFreightInputs(){const f=frSetting();$('frRatio').value=f.ratio||6000;$('frVolPrice').value=f.volPrice||'';$('frWtPrice').value=f.wtPrice||'';$('frExtra').value=f.extra||'';$('frQty').value=f.qty||'';}
+function saveFreightInputs(){const f=frSetting();f.ratio=+$('frRatio').value||6000;f.volPrice=$('frVolPrice').value;f.wtPrice=$('frWtPrice').value;f.extra=$('frExtra').value;f.qty=$('frQty').value;save();}
 function fillFreightProducts(){
   const sel=$('frProd'),keep=sel.value;
   sel.innerHTML='<option value="">— 手动输入 —</option>'+Object.values(data.products).map(p=>`<option value="${esc(p.sku)}">${esc(p.sku)} ${esc(p.name)}</option>`).join('');
@@ -897,44 +899,57 @@ function renderFreight(){
   fillFreightProducts();
   const n=+$('frBoxes').value||0,L=+$('frL').value||0,W=+$('frW').value||0,H=+$('frH').value||0,wt=+$('frWt').value||0;
   const ratio=+$('frRatio').value||6000;
+  const q=+$('frQty').value||0, extra=+$('frExtra').value||0;
   const vpRaw=$('frVolPrice').value,wpRaw=$('frWtPrice').value;
   const vp=vpRaw===''?null:+vpRaw,wp=wpRaw===''?null:+wpRaw;
   if(!n||!L||!W||!H){$('frResult').innerHTML='<div class="empty">填箱数、长/宽/高 → 自动算两种费用</div>';$('frFormula').style.display='none';return;}
   const vol1=L*W*H/ratio, cbm1=L*W*H/1e6;
   const volT=vol1*n, wtT=wt*n, cbmT=cbm1*n;
-  const chargeW=Math.max(volT,wtT);
-  const volFee=vp!=null?volT*vp:null, wtFee=wp!=null?wtT*wp:null;
+  const isVol=volT>=wtT, chargeW=Math.max(volT,wtT);
+  const volFee=vp!=null?volT*vp+extra:null, wtFee=wp!=null?wtT*wp+extra:null;
+  // 货代实际按「计费重」收费：泡货用泡货单价，重用重货单价
+  const realFee=(isVol?vp:wp)==null?null:chargeW*(isVol?vp:wp)+extra;
   const rate=+(data.setting.rateVND||DEF_RATE);
   const vnd=x=>x==null?'':'₫'+Math.round(x*rate).toLocaleString();
+  const money=(v,sub)=>v==null?'<span class="muted" style="font-size:16px">'+(sub||'未填单价')+'</span>':cur()+v.toFixed(2)+' <small>'+vnd(v)+'</small>';
+  const totalQty=q*n;
+  const unitCost=(realFee!=null&&totalQty)?realFee/totalQty:null;
   let h='';
   h+=`<div class="calc-line"><span class="k">单箱体积重（长×宽×高÷${ratio}）</span><span class="vv">${vol1.toFixed(2)} kg</span></div>`;
   h+=`<div class="calc-line"><span class="k">总实重（${n} 箱 × ${wt}kg）</span><span class="vv">${wtT.toFixed(2)} kg</span></div>`;
   h+=`<div class="calc-line"><span class="k">总体积重（${n} 箱）</span><span class="vv">${volT.toFixed(2)} kg</span></div>`;
   h+=`<div class="calc-line"><span class="k">总体积</span><span class="vv">${cbmT.toFixed(3)} m³</span></div>`;
-  h+=`<div class="calc-line"><span class="k">计费重（两者取大）</span><span class="vv">${chargeW.toFixed(2)} kg <span class="muted">${chargeW===volT?'→ 泡货':'→ 重货'}</span></span></div>`;
-  h+=`<div class="calc-big" style="border-top-color:var(--orange)"><span class="k">① 按泡比（体积重）${vp!=null?`<span class="muted"> ${vp} 元/kg</span>`:''}</span><span class="vv">${volFee==null?'<span class="muted" style="font-size:16px">未填单价</span>':cur()+volFee.toFixed(2)+' <small>'+vnd(volFee)+'</small>'}</span></div>`;
-  h+=`<div class="calc-big" style="border-top-color:var(--blue)"><span class="k">② 按重量（实重）${wp!=null?`<span class="muted"> ${wp} 元/kg</span>`:''}</span><span class="vv">${wtFee==null?'<span class="muted" style="font-size:16px">未填单价</span>':cur()+wtFee.toFixed(2)+' <small>'+vnd(wtFee)+'</small>'}</span></div>`;
+  h+=`<div class="calc-line"><span class="k">计费重（两者取大）</span><span class="vv">${chargeW.toFixed(2)} kg <span class="muted">→ ${isVol?'泡货':'重货'}</span></span></div>`;
+  h+=`<div class="calc-big" style="border-top-color:var(--orange)"><span class="k">① 按泡比（体积重 ×${vp==null?'?':vp}）${extra?'<span class="muted"> +附加'+extra+'</span>':''}</span><span class="vv">${money(volFee)}</span></div>`;
+  h+=`<div class="calc-big" style="border-top-color:var(--blue)"><span class="k">② 按重量（实重 ×${wp==null?'?':wp}）${extra?'<span class="muted"> +附加'+extra+'</span>':''}</span><span class="vv">${money(wtFee)}</span></div>`;
+  h+=`<div class="calc-big" style="border-top-color:var(--green)"><span class="k">③ 实际应收（货代按计费重收）</span><span class="vv">${money(realFee,isVol?'未填「泡货单价」':'未填「重货单价」')}</span></div>`;
   if(volFee!=null&&wtFee!=null){
     const diff=Math.abs(volFee-wtFee),cheaper=volFee<wtFee?'按泡比便宜':'按重量便宜';
-    h+=`<div class="calc-line" style="border:none;margin-top:12px"><span class="k">两者差额（${cheaper}）</span><span class="vv">${cur()+diff.toFixed(2)}</span></div>`;
+    h+=`<div class="calc-line" style="border:none;margin-top:12px"><span class="k">① ② 两者差额（${cheaper}）</span><span class="vv">${cur()+diff.toFixed(2)}</span></div>`;
+  }
+  if(unitCost!=null){
+    h+=`<div class="calc-line" style="border:none;background:rgba(16,185,129,.12);border-radius:8px;margin-top:8px"><span class="k">单件头程成本（③ ÷ ${totalQty} 件）</span><span class="vv">${cur()+unitCost.toFixed(2)} <small>${vnd(unitCost)}</small></span></div>`;
+  }else if(q){
+    h+=`<div class="calc-line" style="border:none;margin-top:8px"><span class="k muted">单件头程成本</span><span class="vv muted">需先填${isVol?'「泡货单价」':'「重货单价」'}</span></div>`;
   }
   $('frResult').innerHTML=h;
   $('frFormula').style.display='';
   $('frFormula').innerHTML=
 `体积重 = <b>长 × 宽 × 高 ÷ ${ratio}</b> = ${L} × ${W} × ${H} ÷ ${ratio} = <b>${vol1.toFixed(2)} kg/箱</b><br>
 总体积重 = ${vol1.toFixed(2)} × ${n}箱 = <b>${volT.toFixed(2)} kg</b>　|　总实重 = ${wt} × ${n} = <b>${wtT.toFixed(2)} kg</b><br>
-① 按泡比费用 = <b>${volT.toFixed(2)} kg × ${vp==null?'（未填单价）':vp+' 元'}</b>${volFee!=null?' = <b>'+cur()+volFee.toFixed(2)+'</b>':''}<br>
-② 按重量费用 = <b>${wtT.toFixed(2)} kg × ${wp==null?'（未填单价）':wp+' 元'}</b>${wtFee!=null?' = <b>'+cur()+wtFee.toFixed(2)+'</b>':''}<br>
-计费重取大 = max(${volT.toFixed(2)}, ${wtT.toFixed(2)}) = <b>${chargeW.toFixed(2)} kg</b>（${chargeW===volT?'泡货，按体积重收':'重货，按实重收'}）`;
+① 按泡比 = <b>${volT.toFixed(2)} kg × ${vp==null?'（未填单价）':vp+' 元'}</b>${volFee!=null?` + 附加${extra} = <b>${cur()+volFee.toFixed(2)}</b>`:(extra?' + 附加'+extra:'')}<br>
+② 按重量 = <b>${wtT.toFixed(2)} kg × ${wp==null?'（未填单价）':wp+' 元'}</b>${wtFee!=null?` + 附加${extra} = <b>${cur()+wtFee.toFixed(2)}</b>`:(extra?' + 附加'+extra:'')}<br>
+计费重取大 = max(${volT.toFixed(2)}, ${wtT.toFixed(2)}) = <b>${chargeW.toFixed(2)} kg</b>（${isVol?'泡货，按体积重收':'重货，按实重收'}）<br>
+③ 实际应收 = <b>${chargeW.toFixed(2)} kg × ${(isVol?vp:wp)==null?'（未填对应单价）':(isVol?vp:wp)+' 元'}</b>${realFee!=null?` + 附加${extra} = <b>${cur()+realFee.toFixed(2)}</b>`:(extra?' + 附加'+extra:'')}${unitCost!=null?`<br>单件头程成本 = ${cur()+realFee.toFixed(2)} ÷ ${totalQty} 件 = <b>${cur()+unitCost.toFixed(2)}/件</b>`:''}`;
 }
-['frBoxes','frL','frW','frH','frWt','frRatio','frVolPrice','frWtPrice'].forEach(id=>$(id).addEventListener('input',()=>{saveFreightInputs();renderFreight();}));
+['frBoxes','frL','frW','frH','frWt','frRatio','frVolPrice','frWtPrice','frQty','frExtra'].forEach(id=>$(id).addEventListener('input',()=>{saveFreightInputs();renderFreight();}));
 $('frProd').onchange=()=>{
   const p=data.products[$('frProd').value];
-  if(p){$('frL').value=p.boxL||'';$('frW').value=p.boxW||'';$('frH').value=p.boxH||'';$('frWt').value=p.boxWeight||'';}
+  if(p){$('frL').value=p.boxL||'';$('frW').value=p.boxW||'';$('frH').value=p.boxH||'';$('frWt').value=p.boxWeight?(p.boxWeight/1000).toFixed(2):'';$('frQty').value=p.boxQty||'';saveFreightInputs();}
   renderFreight();
 };
 $('frCalc').onclick=()=>{renderFreight();toast('已计算');};
-$('frClear').onclick=()=>{['frL','frW','frH','frWt'].forEach(i=>$(i).value='');$('frBoxes').value=1;renderFreight();};
+$('frClear').onclick=()=>{['frL','frW','frH','frWt','frQty'].forEach(i=>$(i).value='');$('frBoxes').value=1;$('frProd').value='';saveFreightInputs();renderFreight();};
 
 // ============ SETTINGS ============
 function applySettingInputs(){$('setDaiRate').value=data.setting.daiRate??6;$('setHpRate').value=data.setting.hpRate??0;$('setCur').value=data.setting.cur||'¥';$('setRateVND').value=data.setting.rateVND??DEF_RATE;$('setTrack').value=data.setting.track||'https://www.kuaidi100.com/?nu={no}';}
