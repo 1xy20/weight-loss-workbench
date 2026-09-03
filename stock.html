@@ -127,6 +127,7 @@ input:focus,select:focus{border-color:var(--blue);box-shadow:0 0 0 3px rgba(59,1
 
 <!-- HOME -->
 <div class="page active" id="page-home">
+  <div id="backupTip"></div>
   <div class="stats" id="homeStats"></div>
   <div class="card">
     <h3>📋 最近采购批次</h3>
@@ -359,6 +360,10 @@ input:focus,select:focus{border-color:var(--blue);box-shadow:0 0 0 3px rgba(59,1
       <button class="btn btn-outline" id="importBtn">导入数据</button>
       <button class="btn btn-outline btn-red" id="clearBtn">清空全部数据</button>
     </div>
+    <div class="row" style="margin-top:14px">
+      <div class="field" style="max-width:180px"><label>备份提醒周期（天）</label><input id="setBackupDays" type="number" min="1" max="90" step="1"></div>
+      <div class="field" style="max-width:260px"><label>上次备份</label><div id="backupInfo" style="padding-top:8px;font-size:14px"></div></div>
+    </div>
     <p class="muted" style="margin-top:12px;line-height:1.7">
       数据保存在你浏览器本地（localStorage）。换设备或清缓存会丢失，建议定期导出备份。<br>
       关于「直接看物流」：本地文件无法实时拉取物流轨迹（需要物流商 API），这里记录单号+状态+轨迹，并用「查物流」按钮跳转官网查询。
@@ -397,10 +402,10 @@ function migrate(){
   if(!data.setting.freight){data.setting.freight={ratio:6000,volPrice:'',wtPrice:''};save();}
 }
 function defaultData(){return{
-  setting:{daiRate:6,hpRate:0,cur:'¥',track:'https://www.kuaidi100.com/?nu={no}',rateVND:DEF_RATE},
+  setting:{daiRate:6,hpRate:0,cur:'¥',track:'https://www.kuaidi100.com/?nu={no}',rateVND:DEF_RATE,backupDays:7},
   products:{},purchases:[],ships:[]
 }}
-function save(){localStorage.setItem(KEY,JSON.stringify(data))}
+function save(){localStorage.setItem(KEY,JSON.stringify(data));renderBackupTip();}
 function uid(){return Date.now()+''+Math.floor(Math.random()*1000)}
 function cur(){return(data.setting&&data.setting.cur)||'¥'}
 function esc(s){return(s||'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]))}
@@ -952,25 +957,70 @@ $('frCalc').onclick=()=>{renderFreight();toast('已计算');};
 $('frClear').onclick=()=>{['frL','frW','frH','frWt','frQty'].forEach(i=>$(i).value='');$('frBoxes').value=1;$('frProd').value='';saveFreightInputs();renderFreight();};
 
 // ============ SETTINGS ============
-function applySettingInputs(){$('setDaiRate').value=data.setting.daiRate??6;$('setHpRate').value=data.setting.hpRate??0;$('setCur').value=data.setting.cur||'¥';$('setRateVND').value=data.setting.rateVND??DEF_RATE;$('setTrack').value=data.setting.track||'https://www.kuaidi100.com/?nu={no}';}
+function applySettingInputs(){$('setDaiRate').value=data.setting.daiRate??6;$('setHpRate').value=data.setting.hpRate??0;$('setCur').value=data.setting.cur||'¥';$('setRateVND').value=data.setting.rateVND??DEF_RATE;$('setTrack').value=data.setting.track||'https://www.kuaidi100.com/?nu={no}';$('setBackupDays').value=+data.setting.backupDays||7;renderBackupInfo();}
 $('saveSetting').onclick=()=>{
   data.setting.daiRate=+$('setDaiRate').value||6;
   data.setting.hpRate=+$('setHpRate').value||0;
   data.setting.cur=$('setCur').value.trim()||'¥';
   data.setting.rateVND=+$('setRateVND').value||DEF_RATE;
   data.setting.track=$('setTrack').value.trim()||'https://www.kuaidi100.com/?nu={no}';
-  save();applySettingInputs();toast('设置已保存');
+  data.setting.backupDays=Math.min(90,Math.max(1,+$('setBackupDays').value||7));
+  save();applySettingInputs();renderBackupTip();toast('设置已保存');
 };
-$('exportBtn').onclick=()=>{const blob=new Blob([JSON.stringify(data,null,2)],{type:'application/json'});
-  const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='备货物流数据_'+today+'.json';a.click();toast('已导出');};
+$('exportBtn').onclick=()=>doBackup(1);
 $('importBtn').onclick=()=>$('importFile').click();
 $('importFile').onchange=e=>{const f=e.target.files[0];if(!f)return;const r=new FileReader();
   r.onload=()=>{try{const nd=JSON.parse(r.result);if(nd&&nd.products){data=nd;save();renderAll();toast('数据已导入');}}catch(err){toast('文件格式不对');}};
   r.readAsText(f);e.target.value='';};
 $('clearBtn').onclick=()=>{if(confirm('确定清空全部数据？此操作不可恢复')){data=defaultData();save();renderAll();toast('已清空');}};
 
+// ============ 备份提醒 ============
+function hasAnyData(){return Object.keys(data.products||{}).length>0||(data.purchases||[]).length>0||(data.ships||[]).length>0;}
+function dayGap(d){if(!d)return null;const a=new Date(d+'T00:00:00'),b=new Date(fmtD(new Date())+'T00:00:00');return Math.round((b-a)/86400000);}
+function backupState(){
+  if(!hasAnyData())return{due:false,empty:true};
+  if(data.setting.backupSnooze===today)return{due:false,snoozed:true};
+  const last=data.setting.lastBackup, th=+data.setting.backupDays||7;
+  if(!last)return{due:true,never:true,th};
+  const gap=dayGap(last);
+  return{due:gap>=th,gap,th,last};
+}
+function doBackup(manual){
+  const blob=new Blob([JSON.stringify(data,null,2)],{type:'application/json'});
+  const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='备货物流数据_'+fmtD(new Date())+'.json';a.click();
+  data.setting.lastBackup=fmtD(new Date());data.setting.backupSnooze='';save();
+  renderBackupTip();renderBackupInfo();if(!manual)toast('已备份到「下载」文件夹');
+  else toast('已导出 · 备份时间已记录');
+}
+function snoozeBackup(){data.setting.backupSnooze=today;save();renderBackupTip();toast('今天不再提醒，明天见');}
+function renderBackupInfo(){
+  const el=$('backupInfo');if(!el)return;
+  const last=data.setting.lastBackup;
+  if(!last){el.innerHTML='<span style="color:var(--red);font-weight:600">从未备份过</span>';return;}
+  const g=dayGap(last);
+  const col=g>=(+data.setting.backupDays||7)?'var(--red)':'var(--green)';
+  el.innerHTML=`<span style="color:${col};font-weight:600">${last}</span> <span class="muted">（${g===0?'今天':g+' 天前'}）</span>`;
+}
+function renderBackupTip(){
+  const el=$('backupTip');if(!el)return;
+  const st=backupState();
+  // 状态没变就不动 DOM（save() 调用很频繁，避免无谓重绘）
+  const sig=st.due?(st.never?'never':('gap'+st.gap)):'none';
+  if(el.dataset.sig===sig)return;
+  el.dataset.sig=sig;
+  if(!st.due){el.innerHTML='';return;}
+  const txt=st.never
+    ? '⚠️ <b>你还没备份过。</b>所有记录只存在这台设备的浏览器里，清缓存 / 换电脑 / 重装系统就没了，找不回来。'
+    : `⚠️ 距离上次备份已 <b>${st.gap}</b> 天（你设的周期是 ${st.th} 天），该导出一份了。`;
+  el.innerHTML=`<div class="card" style="border-left:4px solid var(--orange);background:rgba(245,158,11,.12);display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:14px">
+    <div style="flex:1;min-width:230px;line-height:1.7;font-size:14px">${txt}</div>
+    <button class="btn btn-green" onclick="doBackup()">💾 立即备份</button>
+    <button class="btn btn-outline" onclick="snoozeBackup()">今天不提醒</button>
+  </div>`;
+}
+
 // ============ RENDER ALL ============
-function renderAll(){fillSkuSelects();renderProducts();renderPurchases();renderFreight();renderShips();renderHome();renderCalc();renderProfit();}
+function renderAll(){fillSkuSelects();renderProducts();renderPurchases();renderFreight();renderShips();renderHome();renderCalc();renderProfit();renderBackupTip();}
 renderAll();
 </script>
 </body>
