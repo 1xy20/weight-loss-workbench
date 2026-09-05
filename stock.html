@@ -231,13 +231,12 @@ input:focus,select:focus{border-color:var(--blue);box-shadow:0 0 0 3px rgba(59,1
   <div class="card">
     <h3>💰 到仓成本自动计算（按月合并算平均单价）</h3>
     <div class="row">
-      <div class="field" style="max-width:165px"><label>统计月份</label><input id="calcMonth" type="month"></div>
+      <div class="field" style="max-width:200px"><label>统计月份</label><select id="calcMonth"></select></div>
       <div class="field" style="max-width:210px"><label>SKU 筛选</label><select id="calcSku"><option value="">全部 SKU</option></select></div>
     </div>
     <div style="display:flex;gap:8px;flex-wrap:wrap;margin:10px 0">
       <button class="btn btn-sm" id="calcPickAll">✅ 全选当前列表</button>
       <button class="btn btn-sm btn-outline" id="calcClearSel">清空勾选</button>
-      <button class="btn btn-sm btn-outline" id="calcAllMonth">显示全部月份</button>
     </div>
     <div style="margin-bottom:10px"><input id="calcSearch" placeholder="🔍 再搜 SKU / 运单号（可选）" style="width:100%"></div>
 
@@ -248,7 +247,7 @@ input:focus,select:focus{border-color:var(--blue);box-shadow:0 0 0 3px rgba(59,1
     <div id="calcShipList" style="max-height:220px;overflow:auto;margin-bottom:8px"></div>
 
     <div class="calc-box" id="calcResult">
-      <div class="empty">选好月份 → 点「全选当前列表」→ 立刻算出当月平均到仓单价</div>
+      <div class="empty">选好范围（月份可选「全部月份」）→ 点「全选当前列表」→ 立刻算出平均到仓单价</div>
     </div>
     <div class="formula" id="calcFormula" style="display:none"></div>
   </div>
@@ -581,6 +580,7 @@ function renderShips(){
   }
   let h='<table class="tbl"><thead><tr><th>日期</th><th>SKU</th><th>运单号</th><th>重量(kg)</th><th>代发费</th><th>海防运费</th><th>合计</th><th>含物流费单价</th><th>单件物流费<br><span class="muted" style="font-weight:400;font-size:11px">(不含采购价)</span></th><th>状态</th><th></th></tr></thead><tbody>';
   ss.forEach(s=>{const f=shipFee(s);
+    const skuTxt=s.sku||(s.puId?(data.purchases.find(x=>x.id===s.puId)||{}).sku:'')||'—';
     let unitTxt='—',perItemTxt='—';
     if(s.puId){const pu=data.purchases.find(x=>x.id===s.puId);
       if(pu&&pu.qty){const up=(pu.amount+f.total)/pu.qty;unitTxt=`${cur()}${up.toFixed(2)}<br><span class="muted" style="font-size:11px">/件（${pu.qty}件）</span>`;
@@ -597,10 +597,12 @@ function delShip(id){data.ships=data.ships.filter(s=>s.id!==id);save();renderShi
 // ============ CALC 到仓成本 ============
 let calcSel=new Set();      // 选中的代发物流记录 id
 let calcPuSel=new Set();    // 选中的采购批次 id
+let calcMonthVal=null;      // null = 全部月份（不按月筛选）；'2026-08' = 指定月份
+let calcMonthTouched=false; // 用户是否主动选过月份（true 后不再自动填）
 function monthOf(d){return (d||'').slice(0,7);}
 function calcFilters(){
   return {q:($('calcSearch').value||'').trim().toLowerCase(),
-          m:$('calcMonth').value||'',
+          m:calcMonthVal||'',
           sku:$('calcSku').value||''};
 }
 function fillCalcSkuSelect(){
@@ -610,11 +612,26 @@ function fillCalcSkuSelect(){
     const pn=data.products[s];return `<option value="${esc(s)}">${esc(s)}${pn?' · '+esc(pn.name):''}</option>`;}).join('');
   if(keep&&skus.includes(keep))$('calcSku').value=keep;
 }
-function calcDefaultMonth(){
-  // 首次进入：默认最近一次采购所在月份，一进来就有内容
-  if($('calcMonth').value)return;
-  const ps=data.purchases.slice().sort((a,b)=>b.date.localeCompare(a.date));
-  if(ps.length)$('calcMonth').value=monthOf(ps[0].date);
+function calcAvailableMonths(){
+  return [...new Set([...data.purchases,...data.ships].map(x=>monthOf(x.date)).filter(Boolean))].sort().reverse();
+}
+function fillCalcMonthSelect(){
+  const months=calcAvailableMonths();
+  // 首次进入才默认定位到最近一次采购所在月份；之后一律尊重用户的选择（包括「全部月份」）
+  if(!calcMonthTouched){
+    const ps=data.purchases.slice().sort((a,b)=>b.date.localeCompare(a.date));
+    calcMonthVal=ps.length?(monthOf(ps[0].date)||null):null;
+    calcMonthTouched=true;
+  }
+  // 选中的月份数据被删光了，就自动退回「全部月份」，避免卡在空列表
+  if(calcMonthVal&&!months.includes(calcMonthVal))calcMonthVal=null;
+  const nAll=data.purchases.length;
+  $('calcMonth').innerHTML=
+    `<option value="">🗓 全部月份（不按月筛选 · ${nAll} 批）</option>`
+    +months.map(m=>{
+      const c=data.purchases.filter(p=>monthOf(p.date)===m).length;
+      return `<option value="${m}">${m}（${c} 批）</option>`;}).join('');
+  $('calcMonth').value=calcMonthVal||'';
 }
 function filteredCalcPurchases(){
   const {q,m,sku}=calcFilters();
@@ -637,7 +654,7 @@ function filteredCalcShips(){
 }
 function renderCalc(){
   fillCalcSkuSelect();
-  calcDefaultMonth();
+  fillCalcMonthSelect();
   renderCalcPuOptions();
   renderCalcShipOptions();
   renderCalcResult();
@@ -647,7 +664,7 @@ function renderCalcPuOptions(){
   const ps=filteredCalcPurchases();
   const nSel=ps.filter(p=>calcPuSel.has(p.id)).length;
   $('calcPuCount').textContent=ps.length?` — 已选 ${nSel} / ${ps.length} 批`:'';
-  if(!ps.length){$('calcPuList').innerHTML='<div class="empty">该条件下没有采购批次，换个月份或点「显示全部月份」</div>';return;}
+  if(!ps.length){$('calcPuList').innerHTML='<div class="empty">该条件下没有采购批次 → 把「统计月份」改成「全部月份」，或换个 SKU</div>';return;}
   $('calcPuList').innerHTML=ps.map(p=>{
     const pn=data.products[p.sku];const chk=calcPuSel.has(p.id)?'checked':'';
     return `<label style="display:flex;align-items:center;gap:10px;padding:10px 12px;border:1px solid var(--line);border-radius:10px;margin-bottom:8px;cursor:pointer">
@@ -689,7 +706,7 @@ function renderCalcResult(){
   const ships=[...calcSel].map(id=>data.ships.find(s=>s.id===id)).filter(Boolean)
               .sort((a,b)=>a.date.localeCompare(b.date));
   if(!pus.length){
-    $('calcResult').innerHTML='<div class="empty">'+(ships.length?'还需要勾选上面的「采购批次」，才能算出单价（要用采购件数当分母）':'选好月份后点「全选当前列表」，或手动勾选采购批次 + 代发物流')+'</div>';
+    $('calcResult').innerHTML='<div class="empty">'+(ships.length?'还需要勾选上面的「采购批次」，才能算出单价（要用采购件数当分母）':'勾选上面的「采购批次」+「代发物流」，或点「全选当前列表」（月份可选「全部月份」）')+'</div>';
     $('calcFormula').style.display='none';return;}
   const amount=pus.reduce((t,p)=>t+(+p.amount||0),0);
   const qty=pus.reduce((t,p)=>t+(+p.qty||0),0);
@@ -699,7 +716,7 @@ function renderCalcResult(){
   const buyUnit=qty?amount/qty:0;
   const shipPerItem=qty?shipTotal/qty:0;
   const skus=[...new Set(pus.map(p=>p.sku).filter(Boolean))];
-  const mLabel=$('calcMonth').value||'全部月份';
+  const mLabel=calcMonthVal?calcMonthVal:'全部月份（跨月合并）';
   let h='';
   if(skus.length>1)h+=`<div class="calc-line" style="background:rgba(245,158,11,.10);border-radius:8px"><span class="k">⚠️ 本次合并了 ${skus.length} 个 SKU（${skus.map(esc).join('、')}），算出的是<b>综合平均单价</b>。想单独看某个 SKU，用上方「SKU 筛选」</span></div>`;
   h+=`<div class="calc-line"><span class="k">统计范围</span><span class="vv">${esc(mLabel)}${skus.length===1?' · '+esc(skus[0]):''}</span></div>`;
@@ -722,7 +739,7 @@ function renderCalcResult(){
 }
 function renderCalcSummary(){
   // 按当前选中月份，分 SKU 统计到仓均价；未关联 SKU 的运费按采购件数比例分摊
-  const m=$('calcMonth').value||'';
+  const m=calcMonthVal||'';
   $('calcSumTitle').textContent=m?`（${m}）`:'（全部月份）';
   let pus=data.purchases.slice();
   let sps=data.ships.slice();
@@ -827,14 +844,13 @@ $('pSearch').oninput=renderProducts;
 $('puSearch').oninput=renderPurchases;
 $('shSearch').oninput=renderShips;
 $('calcSearch').oninput=renderCalc;
-$('calcMonth').onchange=()=>{calcSel.clear();calcPuSel.clear();renderCalc();};
+$('calcMonth').onchange=()=>{calcMonthVal=$('calcMonth').value||null;calcSel.clear();calcPuSel.clear();renderCalc();};
 $('calcSku').onchange=()=>{calcSel.clear();calcPuSel.clear();renderCalc();};
 $('calcPickAll').onclick=()=>{
   filteredCalcPurchases().forEach(p=>calcPuSel.add(p.id));
   filteredCalcShips().forEach(s=>calcSel.add(s.id));
   renderCalc();toast('已全选当前列表');};
 $('calcClearSel').onclick=()=>{calcSel.clear();calcPuSel.clear();renderCalc();};
-$('calcAllMonth').onclick=()=>{$('calcMonth').value='';calcSel.clear();calcPuSel.clear();renderCalc();toast('已显示全部月份');};
 function updateCvInfo(){$('cvInfo').textContent=`当前汇率：1 元 ≈ ${getRate1().toLocaleString()} 越南盾（1 ₫ ≈ ${(1/getRate1()).toFixed(6)} 元）`;
   const v=+$('cvVnd').value||0;$('cvCny').value=v? (v/getRate1()).toFixed(2):'';}
 $('cvVnd').oninput=()=>{const v=+$('cvVnd').value||0;$('cvCny').value=(v/getRate1()).toFixed(2);updateCvInfo();};
