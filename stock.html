@@ -294,7 +294,11 @@ input:focus,select:focus{border-color:var(--blue);box-shadow:0 0 0 3px rgba(59,1
   <div class="card">
     <h3>📈 利润计算器</h3>
     <div class="row">
-      <div class="field"><label>关联采购批次（自动带入进货价/重量/数量）</label><select id="pfLink"></select></div>
+      <div class="field"><label>关联采购批次（自动带入进货价/重量/数量）<span id="pfLinkCount" class="muted" style="font-weight:400"></span></label>
+        <input id="pfLinkSearch" placeholder="🔍 搜 SKU / 名称 / 日期（如 08 或 A01）" style="margin-bottom:6px">
+        <select id="pfLink"></select>
+        <div id="pfLinkInfo" class="muted" style="font-size:12px;margin-top:5px;line-height:1.6"></div>
+      </div>
       <div class="field" style="max-width:160px"><label>发货渠道</label><input id="pfChannel" value="海防仓"></div>
     </div>
     <div class="row">
@@ -770,10 +774,38 @@ function renderCalcSummary(){
 }
 
 // ============ PROFIT 利润计算器 ============
+function profitBatchList(){
+  const q=($('pfLinkSearch').value||'').trim().toLowerCase();
+  let ps=data.purchases.slice().sort((a,b)=>b.date.localeCompare(a.date));
+  if(q)ps=ps.filter(p=>{const pn=data.products[p.sku]||{};
+    return (p.sku||'').toLowerCase().includes(q)||(pn.name||'').toLowerCase().includes(q)||(p.date||'').includes(q);});
+  return ps;
+}
+function fillProfitLink(){
+  const sel=$('pfLink'),keep=sel.value;
+  const ps=profitBatchList();
+  // 被筛掉的当前选中项要留着，避免下拉里选中的和实际算的对不上
+  if(keep&&!ps.some(p=>p.id===keep)){
+    const cur=data.purchases.find(p=>p.id===keep);if(cur)ps.push(cur);
+  }
+  const groups={};
+  ps.forEach(p=>{const m=monthOf(p.date)||'未填日期';(groups[m]=groups[m]||[]).push(p);});
+  let h='<option value="">— 不关联，手动填 —</option>';
+  Object.keys(groups).sort().reverse().forEach(m=>{
+    h+=`<optgroup label="${esc(m)}（${groups[m].length} 批）">`;
+    groups[m].forEach(p=>{
+      const pn=data.products[p.sku]||{};
+      const u=(+p.qty)?(+p.amount)/(+p.qty):0;
+      h+=`<option value="${p.id}">${p.date||'—'} · ${esc(p.sku)}${pn.name?' '+esc(pn.name):''} · ${p.qty}件 · ${cur()}${u.toFixed(2)}/件</option>`;});
+    h+='</optgroup>';
+  });
+  sel.innerHTML=h;
+  if(keep&&ps.some(p=>p.id===keep))sel.value=keep;
+  const total=data.purchases.length;
+  $('pfLinkCount')&&($('pfLinkCount').textContent=ps.length===total?`共 ${total} 批`:`筛出 ${ps.length} / ${total} 批`);
+}
 function renderProfit(){
-  const ps=data.purchases.slice().sort((a,b)=>b.date.localeCompare(a.date));
-  $('pfLink').innerHTML='<option value="">— 不关联，手动填 —</option>'+ps.map(p=>{
-    const pn=data.products[p.sku];return `<option value="${p.id}">${p.date} · ${p.sku} · ${p.qty}件</option>`;}).join('');
+  fillProfitLink();
   $('pfRate1').value=data.setting.rateVND||DEF_RATE;
   $('pfKol').disabled=($('pfPriceMode').value!=='kol');$('pfKol').style.opacity=($('pfPriceMode').value==='kol')?1:.5;
   calcProfit();updateCvInfo();
@@ -828,16 +860,26 @@ function calcProfit(){
   cmp+='</tbody></table>';
   $('pfKolCompare').innerHTML=cmp;
 }
-$('pfLink').onchange=()=>{const pid=$('pfLink').value;if(!pid){calcProfit();return;}
-  const p=data.purchases.find(x=>x.id===pid);if(!p){calcProfit();return;}
-  const recent=data.ships.slice().sort((a,b)=>b.date.localeCompare(a.date))[0];
-  let unit=p.amount/p.qty,shipTotal=0;
-  if(recent){const f=shipFee(recent);shipTotal=f.total;unit=(p.amount+shipTotal)/p.qty;}
-  $('pfCost').value=unit.toFixed(2);
-  $('pfQty').value=p.qty;
+$('pfLink').onchange=()=>{
+  const pid=$('pfLink').value;
+  if(!pid){$('pfLinkInfo').textContent='';calcProfit();return;}
+  const p=data.purchases.find(x=>x.id===pid);if(!p){$('pfLinkInfo').textContent='';calcProfit();return;}
+  // 只取「属于这一批」的运单：优先显式关联到本批次的，其次同 SKU 且没关联到任何批次的
+  let ss=data.ships.filter(s=>s.puId===p.id),src='关联运单';
+  if(!ss.length){ss=data.ships.filter(s=>!s.puId&&s.sku===p.sku);src='同 SKU 运单';}
+  const shipTotal=ss.reduce((t,s)=>t+shipFee(s).total,0);
+  const q=+p.qty||0, amt=+p.amount||0;
+  const buyUnit=q?amt/q:0, shipUnit=q?shipTotal/q:0;
+  $('pfCost').value=(buyUnit+shipUnit).toFixed(2);
+  $('pfQty').value=q||1;
   const pn=data.products[p.sku];if(pn&&pn.weight)$('pfWeight').value=pn.weight;
-  $('pfShip').value='';
+  $('pfShip').value='';  // 运费已并进进货价，留空避免重复计算
+  const dates=ss.slice().sort((a,b)=>a.date.localeCompare(b.date)).map(s=>s.date).join('、');
+  $('pfLinkInfo').innerHTML=ss.length
+    ? `进货价 = 采购 ${cur()}${buyUnit.toFixed(2)} + 运费 ${cur()}${shipUnit.toFixed(2)}（${ss.length} 条${src}共 ${cur()}${shipTotal.toFixed(2)}：${esc(dates)}）`
+    : `<span style="color:var(--orange)">⚠️ 该批次没有匹配的运单，进货价 = 纯采购价 ${cur()}${buyUnit.toFixed(2)}/件（未含运费，可在下面「总运费」手动补）</span>`;
   calcProfit();};
+$('pfLinkSearch').oninput=fillProfitLink;
 ['pfQty','pfCost','pfWeight','pfShip','pfSaleVND','pfRate','pfKol','pfFee','pfOp','pfRate1','pfChannel'].forEach(i=>{const el=$(i);if(el)el.oninput=calcProfit;});
 $('pfPriceMode').onchange=()=>{const on=$('pfPriceMode').value==='kol';$('pfKol').disabled=!on;$('pfKol').style.opacity=on?1:.5;if(on&&!$('pfKol').value)$('pfKol').value='5';calcProfit();};
 $('pSearch').oninput=renderProducts;
