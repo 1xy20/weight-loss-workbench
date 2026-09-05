@@ -47,6 +47,12 @@ input:focus,select:focus{border-color:var(--blue);box-shadow:0 0 0 3px rgba(59,1
 .btn-outline:hover{background:var(--bg)}
 .btn-sm{padding:7px 13px;font-size:13px}
 .btn-xs{padding:4px 10px;font-size:12px}
+/* 计算器按键：大块好按 */
+#calcTool .btn{padding:16px 0;font-size:20px;font-weight:700;border-radius:12px}
+#calcTool .ct-num{background:#fff;color:var(--txt);border:1px solid var(--line)}
+#calcTool .ct-op{font-size:22px;color:var(--blue)}
+#calcTool .ct-fn{font-size:15px;font-weight:600}
+#calcTool .ct-eq{font-size:22px}
 .toast{position:fixed;bottom:30px;left:50%;transform:translateX(-50%) translateY(20px);background:var(--txt);
   color:#fff;padding:11px 24px;border-radius:30px;font-weight:600;font-size:14px;opacity:0;transition:.25s;
   pointer-events:none;z-index:99;box-shadow:0 4px 20px rgba(0,0,0,.15)}
@@ -121,6 +127,7 @@ input:focus,select:focus{border-color:var(--blue);box-shadow:0 0 0 3px rgba(59,1
   <div class="nav-item" data-page="calc" onclick="switchPage('calc')"><span class="icon">💰</span>到仓成本</div>
   <div class="nav-item" data-page="profit" onclick="switchPage('profit')"><span class="icon">📈</span>利润计算</div>
   <div class="nav-item" data-page="setting" onclick="switchPage('setting')"><span class="icon">⚙️</span>设置</div>
+  <div class="nav-item" data-page="calculator" onclick="switchPage('calculator')"><span class="icon">🧮</span>计算器</div>
 </nav>
 
 <div class="main">
@@ -303,7 +310,7 @@ input:focus,select:focus{border-color:var(--blue);box-shadow:0 0 0 3px rgba(59,1
     </div>
     <div class="row">
       <div class="field" style="max-width:120px"><label>商品数量 *</label><input id="pfQty" type="number" step="1" value="1"></div>
-      <div class="field" style="max-width:150px"><label>进货价 (元/件) *</label><input id="pfCost" type="number" step="0.01" placeholder="到仓单价"></div>
+      <div class="field" style="max-width:170px"><label>进货总成本 (元) *</label><input id="pfCost" type="number" step="0.01" placeholder="改数量自动算"><div id="pfUnitHint" class="muted" style="font-size:12px;margin-top:4px"></div></div>
       <div class="field" style="max-width:130px"><label>商品重量 (g)</label><input id="pfWeight" type="number" step="1"></div>
       <div class="field" style="max-width:130px"><label>总运费 (元)</label><input id="pfShip" type="number" step="0.01" placeholder="运费÷数量填入"></div>
     </div>
@@ -374,6 +381,53 @@ input:focus,select:focus{border-color:var(--blue);box-shadow:0 0 0 3px rgba(59,1
   </div>
 </div>
 
+<!-- CALCULATOR 计算器 -->
+<div class="page" id="page-calculator">
+  <div class="card" style="max-width:420px;margin:0 auto">
+    <h3>🧮 计算器</h3>
+    <div id="calcTool">
+      <div id="ctExpr" style="min-height:18px;font-size:13px;color:var(--sub);text-align:right;padding-right:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis"></div>
+      <div id="ctDisp" style="font-size:38px;font-weight:800;text-align:right;padding:6px 4px 10px;word-break:break-all;line-height:1.2">0</div>
+      <div id="ctConv" class="muted" style="font-size:12px;text-align:right;padding-bottom:10px;min-height:16px"></div>
+      <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px">
+        <button class="btn btn-outline ct-fn" data-c="mc">MC</button>
+        <button class="btn btn-outline ct-fn" data-c="mr">MR</button>
+        <button class="btn btn-outline ct-fn" data-c="mpl">M+</button>
+        <button class="btn btn-outline ct-fn" data-c="mmn">M−</button>
+
+        <button class="btn btn-outline ct-fn" data-c="clear" style="color:var(--red)">C</button>
+        <button class="btn btn-outline ct-fn" data-c="back">⌫</button>
+        <button class="btn btn-outline ct-fn" data-c="pct">%</button>
+        <button class="btn btn-outline ct-op" data-c="div">÷</button>
+
+        <button class="btn ct-num" data-c="7">7</button>
+        <button class="btn ct-num" data-c="8">8</button>
+        <button class="btn ct-num" data-c="9">9</button>
+        <button class="btn btn-outline ct-op" data-c="mul">×</button>
+
+        <button class="btn ct-num" data-c="4">4</button>
+        <button class="btn ct-num" data-c="5">5</button>
+        <button class="btn ct-num" data-c="6">6</button>
+        <button class="btn btn-outline ct-op" data-c="sub">−</button>
+
+        <button class="btn ct-num" data-c="1">1</button>
+        <button class="btn ct-num" data-c="2">2</button>
+        <button class="btn ct-num" data-c="3">3</button>
+        <button class="btn btn-outline ct-op" data-c="add">+</button>
+
+        <button class="btn ct-num" data-c="sign">±</button>
+        <button class="btn ct-num" data-c="0">0</button>
+        <button class="btn ct-num" data-c="dot">.</button>
+        <button class="btn btn-green ct-eq" data-c="eq">=</button>
+      </div>
+      <p class="muted" style="margin-top:12px;line-height:1.7;font-size:13px">
+        下面这行会自动按当前汇率（1 元 = <b id="ctRateTxt">3895</b> ₫）换算，算完直接看越南盾。<br>
+        电脑键盘也能用：数字、<b>+ − * /</b>、<b>Enter</b> 等于、<b>Backspace</b> 退格、<b>Esc</b> 清空。
+      </p>
+    </div>
+  </div>
+</div>
+
 </div>
 
 <input type="file" id="importFile" accept="application/json" style="display:none">
@@ -425,6 +479,7 @@ function switchPage(p){
   if(p==='ship')renderShips();
   if(p==='calc')renderCalc();
   if(p==='profit')renderProfit();
+  if(p==='calculator')ctShow();
 }
 function trackUrl(no){(data.setting.track||'').replace('{no}',encodeURIComponent(no));
   window.open((data.setting.track||'https://www.kuaidi100.com/?nu={no}').replace('{no}',encodeURIComponent(no)),'_blank');}
@@ -811,9 +866,28 @@ function renderProfit(){
   calcProfit();updateCvInfo();
 }
 function getRate1(){return +$('pfRate1').value||(data.setting.rateVND||DEF_RATE);}
+// pfUnit = 单件到仓成本；pfCost 框里填的是「总成本」。改数量 → 总成本自动跟着变。
+let pfUnit=0;
+function syncCostByQty(){
+  const q=Math.max(1,+$('pfQty').value||1);
+  $('pfCost').value=(pfUnit*q).toFixed(2);
+  updateUnitHint(q);
+}
+function syncUnitByCost(){
+  const q=Math.max(1,+$('pfQty').value||1);
+  pfUnit=(+$('pfCost').value||0)/q;
+  updateUnitHint(q);
+}
+function updateUnitHint(q){
+  const el=$('pfUnitHint');if(!el)return;
+  el.innerHTML=q>1
+    ? `= ${q} 件 × ${cur()}${pfUnit.toFixed(2)}/件（改「商品数量」自动更新）`
+    : `= 1 件 × ${cur()}${pfUnit.toFixed(2)}/件`;
+}
 function calcProfit(){
   const qty=Math.max(1,+$('pfQty').value||1);
-  const cost=+$('pfCost').value||0;
+  const cost=+$('pfCost').value||0;           // 总成本（含 qty 件）
+  const costPer=cost/qty;                      // 摊回单件
   const totalShip=+$('pfShip').value||0;
   const saleVND=+$('pfSaleVND').value||0;
   const rate=+$('pfRate').value||0;
@@ -827,7 +901,7 @@ function calcProfit(){
   const kolFee=saleCNY*kol/100;
   const netIncome=saleCNY-platformFee-kolFee;
   const shipPer=totalShip/qty;
-  const costTotal=cost+fee+op+shipPer;
+  const costTotal=costPer+fee+op+shipPer;   // 单件成本 = 进货(总成本÷件数)+手续费+操作费+运费
   const profitPer=netIncome-costTotal;
   const totalProfit=profitPer*qty;
   const profitRate=saleCNY?profitPer/saleCNY*100:0;
@@ -841,7 +915,8 @@ function calcProfit(){
     <div class="calc-line"><span class="k">平台佣金（${rate}%）</span><span class="vv">${cur()}${platformFee.toFixed(2)}</span></div>
     <div class="calc-line"><span class="k">达人佣金（${kol}%）</span><span class="vv">${cur()}${kolFee.toFixed(2)}</span></div>
     <div class="calc-line"><span class="k">单件净收入</span><span class="vv">${cur()}${netIncome.toFixed(2)}</span></div>
-    <div class="calc-line"><span class="k">单件成本（进货${cost.toFixed(2)}+手续费${fee.toFixed(2)}+操作${op.toFixed(2)}+运费${shipPer.toFixed(2)}）</span><span class="vv">${cur()}${costTotal.toFixed(2)}</span></div>
+    <div class="calc-line"><span class="k">进货总成本（${qty} 件）</span><span class="vv">${cur()}${cost.toFixed(2)} <small>→ 单件 ${cur()}${costPer.toFixed(2)}</small></span></div>
+    <div class="calc-line"><span class="k">单件成本（进货${costPer.toFixed(2)}+手续费${fee.toFixed(2)}+操作${op.toFixed(2)}+运费${shipPer.toFixed(2)}）</span><span class="vv">${cur()}${costTotal.toFixed(2)}</span></div>
     <div class="calc-line" style="margin-top:8px"><span class="k">单件利润${kol?`（含达人 ${kol}%）`:''}</span><span class="vv" style="color:${col}">${cur()}${profitPer.toFixed(2)}</span></div>
     <div class="calc-big"><span class="k">预计总利润（${qty}件）</span><span class="vv" style="color:${col}">${isP?'✅ 盈利 ':'⚠️ 亏损 '}${cur()}${Math.abs(totalProfit).toFixed(2)}</span></div>
     <div class="calc-line" style="margin-top:10px"><span class="k">利润率（占售价）</span><span class="vv" style="color:${col}">${profitRate.toFixed(1)}%</span></div>`;
@@ -870,8 +945,10 @@ $('pfLink').onchange=()=>{
   const shipTotal=ss.reduce((t,s)=>t+shipFee(s).total,0);
   const q=+p.qty||0, amt=+p.amount||0;
   const buyUnit=q?amt/q:0, shipUnit=q?shipTotal/q:0;
-  $('pfCost').value=(buyUnit+shipUnit).toFixed(2);
-  $('pfQty').value=q||1;
+  pfUnit=buyUnit+shipUnit;
+  $('pfQty').value=1;              // 默认算 1 件的账；想算整批就手动把数量改成批次数
+  $('pfCost').value=pfUnit.toFixed(2);
+  updateUnitHint(1);
   const pn=data.products[p.sku];if(pn&&pn.weight)$('pfWeight').value=pn.weight;
   $('pfShip').value='';  // 运费已并进进货价，留空避免重复计算
   const dates=ss.slice().sort((a,b)=>a.date.localeCompare(b.date)).map(s=>s.date).join('、');
@@ -880,7 +957,10 @@ $('pfLink').onchange=()=>{
     : `<span style="color:var(--orange)">⚠️ 该批次没有匹配的运单，进货价 = 纯采购价 ${cur()}${buyUnit.toFixed(2)}/件（未含运费，可在下面「总运费」手动补）</span>`;
   calcProfit();};
 $('pfLinkSearch').oninput=fillProfitLink;
-['pfQty','pfCost','pfWeight','pfShip','pfSaleVND','pfRate','pfKol','pfFee','pfOp','pfRate1','pfChannel'].forEach(i=>{const el=$(i);if(el)el.oninput=calcProfit;});
+// 改数量 → 总成本自动跟着变；手改总成本 → 反推单价
+$('pfQty').addEventListener('input',()=>{syncCostByQty();calcProfit();});
+$('pfCost').addEventListener('input',()=>{syncUnitByCost();calcProfit();});
+['pfWeight','pfShip','pfSaleVND','pfRate','pfKol','pfFee','pfOp','pfRate1','pfChannel'].forEach(i=>{const el=$(i);if(el)el.oninput=calcProfit;});
 $('pfPriceMode').onchange=()=>{const on=$('pfPriceMode').value==='kol';$('pfKol').disabled=!on;$('pfKol').style.opacity=on?1:.5;if(on&&!$('pfKol').value)$('pfKol').value='5';calcProfit();};
 $('pSearch').oninput=renderProducts;
 $('puSearch').oninput=renderPurchases;
@@ -1076,6 +1156,93 @@ function renderBackupTip(){
     <button class="btn btn-outline" onclick="snoozeBackup()">今天不提醒</button>
   </div>`;
 }
+
+// ============ 计算器 ============
+const CT_SYM={add:'+',sub:'−',mul:'×',div:'÷'};
+let ct={disp:'0',prev:null,op:null,fresh:true,mem:0};
+function ctRate(){const el=$('pfRate1');return +(el&&el.value)||+data.setting.rateVND||DEF_RATE;}
+function ctFmt(n){
+  if(!isFinite(n))return '不能除以 0';
+  const r=+n.toFixed(10);
+  return String(r);
+}
+function ctShow(){
+  $('ctDisp').textContent=ct.disp;
+  $('ctExpr').textContent=(ct.prev!==null&&ct.op)?`${ctFmt(ct.prev)} ${CT_SYM[ct.op]}${ct.fresh?'':' '+ct.disp}`:'';
+  const v=parseFloat(ct.disp), r=ctRate();
+  const ok=isFinite(v)&&ct.disp!=='0'&&ct.disp!=='';
+  $('ctConv').innerHTML=ok
+    ? `₫${Math.round(v*r).toLocaleString()} ← 当它是元　·　¥${(v/r).toFixed(2)} ← 当它是盾`
+    : '';
+  $('ctRateTxt').textContent=r.toLocaleString();
+}
+function ctNum(n){
+  if(ct.fresh){ct.disp=(n==='.')?'0.':n;ct.fresh=false;}
+  else if(n==='.'){if(ct.disp.includes('.'))return;ct.disp+='.';}
+  else ct.disp=(ct.disp==='0')?n:ct.disp+n;
+  ctShow();
+}
+function ctCalc(a,b,op){
+  if(op==='add')return a+b;
+  if(op==='sub')return a-b;
+  if(op==='mul')return a*b;
+  if(op==='div')return b===0?NaN:a/b;
+  return b;
+}
+function ctOp(o){
+  const v=parseFloat(ct.disp)||0;
+  if(ct.prev!==null&&ct.op&&!ct.fresh){ct.prev=ctCalc(ct.prev,v,ct.op);ct.disp=ctFmt(ct.prev);}
+  else ct.prev=v;
+  ct.op=o;ct.fresh=true;ctShow();
+}
+function ctEq(){
+  if(ct.prev!==null&&ct.op){
+    const v=parseFloat(ct.disp)||0;
+    ct.disp=ctFmt(ctCalc(ct.prev,v,ct.op));
+    ct.prev=null;ct.op=null;ct.fresh=true;
+  }
+  ctShow();
+}
+function ctClear(){ct.disp='0';ct.prev=null;ct.op=null;ct.fresh=true;ctShow();}
+function ctBack(){if(ct.fresh){ct.fresh=false;ct.disp='0';}else{ct.disp=ct.disp.length>1?ct.disp.slice(0,-1):'0';}ctShow();}
+function ctSign(){ct.disp=(ct.disp==='0')?'0':(ct.disp.startsWith('-')?ct.disp.slice(1):'-'+ct.disp);ctShow();}
+function ctPct(){
+  const v=parseFloat(ct.disp)||0;
+  ct.disp=ctFmt((ct.prev!==null&&ct.op&&!ct.fresh)?ct.prev*v/100:v/100);
+  ct.fresh=true;ctShow();
+}
+function ctMem(k){
+  const v=parseFloat(ct.disp)||0;
+  if(k==='mc')ct.mem=0;
+  else if(k==='mr'){ct.disp=ctFmt(ct.mem);ct.fresh=true;}
+  else if(k==='mpl')ct.mem+=v;
+  else if(k==='mmn')ct.mem-=v;
+  ctShow();
+}
+function ctPress(c){
+  if(/^[0-9]$/.test(c))ctNum(c);
+  else if(c==='dot')ctNum('.');
+  else if(CT_SYM[c])ctOp(c);
+  else if(c==='eq')ctEq();
+  else if(c==='clear')ctClear();
+  else if(c==='back')ctBack();
+  else if(c==='sign')ctSign();
+  else if(c==='pct')ctPct();
+  else if(c==='mc'||c==='mr'||c==='mpl'||c==='mmn')ctMem(c);
+}
+document.querySelectorAll('#calcTool [data-c]').forEach(b=>{
+  b.addEventListener('click',()=>ctPress(b.dataset.c));
+});
+document.addEventListener('keydown',e=>{
+  const pg=$('page-calculator');
+  if(!pg||!pg.classList.contains('active'))return;
+  const t=document.activeElement;
+  if(t&&/INPUT|SELECT|TEXTAREA/.test(t.tagName))return;
+  const k=e.key,map={'+':'add','-':'sub','*':'mul','/':'div','Enter':'eq','=':'eq','Backspace':'back','Escape':'clear','%':'pct','.':'dot'};
+  if(/^[0-9]$/.test(k)){ctPress(k);e.preventDefault();}
+  else if(map[k]){ctPress(map[k]);e.preventDefault();}
+});
+ctShow();   // 初始化汇率显示（需放在 let ct 声明之后）
 
 // ============ RENDER ALL ============
 function renderAll(){fillSkuSelects();renderProducts();renderPurchases();renderFreight();renderShips();renderHome();renderCalc();renderProfit();renderBackupTip();}
