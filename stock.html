@@ -320,7 +320,8 @@ input:focus,select:focus{border-color:var(--blue);box-shadow:0 0 0 3px rgba(59,1
     <div class="field" style="max-width:120px"><label>平台费率 %</label><input id="pfRate" type="number" step="0.1" value="22"></div>
     <div class="field" style="max-width:130px"><label>达人佣金率 %</label><input id="pfKol" type="number" step="0.1" value="0" placeholder="如5/6/7/8" disabled></div>
     <div class="field" style="max-width:120px"><label>手续费 (元/件)</label><input id="pfFee" type="number" step="0.01" value="0.8"></div>
-    <div class="field" style="max-width:120px"><label>操作费 (元/件)</label><input id="pfOp" type="number" step="0.01" value="1.5"></div>
+      <div class="field" style="max-width:120px"><label>操作费 (元/件)</label><input id="pfOp" type="number" step="0.01" value="1.5"></div>
+      <div class="field" style="max-width:130px"><label>提现费率 %</label><input id="pfWithdraw" type="number" step="0.1" value="0.7"><div class="muted" style="font-size:11px;margin-top:4px">回款到银行卡的手续费</div></div>
   </div>
     <div class="row">
       <div class="field" style="max-width:200px"><label>汇率：1元 = ? 越南盾</label><input id="pfRate1" type="number" step="10"></div>
@@ -335,7 +336,7 @@ input:focus,select:focus{border-color:var(--blue);box-shadow:0 0 0 3px rgba(59,1
   </div>
   <div class="card">
     <h3>💡 达人佣金试算（自然流 vs 达人 5/6/7/8%）</h3>
-    <p class="muted" style="margin:-4px 0 12px">在自然流基础上，叠加达人抽成（按售价百分比）后，每件还剩多少利润：</p>
+    <p class="muted" style="margin:-4px 0 12px">在自然流基础上，叠加达人抽成（按售价百分比）、并扣除提现费率后，每件还剩多少利润：</p>
     <div id="pfKolCompare"><div class="empty">填写售价后自动对比</div></div>
   </div>
   <div class="card">
@@ -900,9 +901,12 @@ function calcProfit(){
   const platformFee=saleCNY*rate/100;
   const kolFee=saleCNY*kol/100;
   const netIncome=saleCNY-platformFee-kolFee;
+  const wRate=+$('pfWithdraw').value||0;
+  const withdrawFee=netIncome*wRate/100;
+  const handIncome=netIncome-withdrawFee;
   const shipPer=totalShip/qty;
   const costTotal=costPer+fee+op+shipPer;   // 单件成本 = 进货(总成本÷件数)+手续费+操作费+运费
-  const profitPer=netIncome-costTotal;
+  const profitPer=handIncome-costTotal;
   const totalProfit=profitPer*qty;
   const profitRate=saleCNY?profitPer/saleCNY*100:0;
   const box=$('pfResult');
@@ -915,6 +919,8 @@ function calcProfit(){
     <div class="calc-line"><span class="k">平台佣金（${rate}%）</span><span class="vv">${cur()}${platformFee.toFixed(2)}</span></div>
     <div class="calc-line"><span class="k">达人佣金（${kol}%）</span><span class="vv">${cur()}${kolFee.toFixed(2)}</span></div>
     <div class="calc-line"><span class="k">单件净收入</span><span class="vv">${cur()}${netIncome.toFixed(2)}</span></div>
+    <div class="calc-line"><span class="k">提现费（回款 ${wRate}%）</span><span class="vv">${cur()}${withdrawFee.toFixed(2)}</span></div>
+    <div class="calc-line"><span class="k">单件到手（扣提现后）</span><span class="vv">${cur()}${handIncome.toFixed(2)}</span></div>
     <div class="calc-line"><span class="k">进货总成本（${qty} 件）</span><span class="vv">${cur()}${cost.toFixed(2)} <small>→ 单件 ${cur()}${costPer.toFixed(2)}</small></span></div>
     <div class="calc-line"><span class="k">单件成本（进货${costPer.toFixed(2)}+手续费${fee.toFixed(2)}+操作${op.toFixed(2)}+运费${shipPer.toFixed(2)}）</span><span class="vv">${cur()}${costTotal.toFixed(2)}</span></div>
     <div class="calc-line" style="margin-top:8px"><span class="k">单件利润${kol?`（含达人 ${kol}%）`:''}</span><span class="vv" style="color:${col}">${cur()}${profitPer.toFixed(2)}</span></div>
@@ -924,7 +930,7 @@ function calcProfit(){
   const rates=[0,5,6,7,8];
   let cmp='<table class="tbl"><thead><tr><th>达人佣金</th><th>单件利润</th><th>总利润('+qty+'件)</th><th>利润率</th></tr></thead><tbody>';
   rates.forEach(r=>{
-    const ni=saleCNY*(1-rate/100-r/100);
+    const ni=saleCNY*(1-rate/100-r/100)*(1-wRate/100);
     const pp=ni-costTotal;
     const tp=pp*qty;
     const pr=saleCNY?pp/saleCNY*100:0;
@@ -960,7 +966,7 @@ $('pfLinkSearch').oninput=fillProfitLink;
 // 改数量 → 总成本自动跟着变；手改总成本 → 反推单价
 $('pfQty').addEventListener('input',()=>{syncCostByQty();calcProfit();});
 $('pfCost').addEventListener('input',()=>{syncUnitByCost();calcProfit();});
-['pfWeight','pfShip','pfSaleVND','pfRate','pfKol','pfFee','pfOp','pfRate1','pfChannel'].forEach(i=>{const el=$(i);if(el)el.oninput=calcProfit;});
+['pfWeight','pfShip','pfSaleVND','pfRate','pfKol','pfFee','pfOp','pfWithdraw','pfRate1','pfChannel'].forEach(i=>{const el=$(i);if(el)el.oninput=calcProfit;});
 $('pfPriceMode').onchange=()=>{const on=$('pfPriceMode').value==='kol';$('pfKol').disabled=!on;$('pfKol').style.opacity=on?1:.5;if(on&&!$('pfKol').value)$('pfKol').value='5';calcProfit();};
 $('pSearch').oninput=renderProducts;
 $('puSearch').oninput=renderPurchases;
